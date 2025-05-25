@@ -1,0 +1,17 @@
+cat <<EOF > .gitignore
+# MicroPython cache files
+*.mpy
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+
+# Webots backup/runtime files
+*.wbproj.*
+EOF
