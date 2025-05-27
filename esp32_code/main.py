@@ -1,22 +1,20 @@
-# main.py (ESP32 Code) - Wi-Fi HIL TCP Server - V2 (Continuous Command Sending)
+# main.py (ESP32 Code) - Fixed Dijkstra Path Planning with HIL
 
 import network
 import socket
 import time
-from machine import Pin # For onboard LED status
-from path_planner import PathPlanner  # Import our path planner
+from machine import Pin
+from path_planner import PathPlanner
 
 # --- Wi-Fi Configuration ---
-WIFI_SSID = "CJ" # <<<<<<<<<<< CHANGE THIS
-WIFI_PASSWORD = "4533simon" # <<<<<<<<<<< CHANGE THIS
-# --------------------------
+WIFI_SSID = "CJ"  # Change this
+WIFI_PASSWORD = "4533simon"  # Change this
 
 # --- Server Configuration ---
 HOST_IP = '0.0.0.0' 
-PORT = 8266         
-# -------------------------
+PORT = 8266
 
-# --- Onboard LED (usually GPIO2 on many ESP32 boards) ---
+# --- Onboard LED ---
 try:
     onboard_led = Pin(2, Pin.OUT)
     onboard_led.off() 
@@ -32,7 +30,7 @@ def blink_led(pin, times=1, delay_on=0.1, delay_off=0.1):
             pin.off()
             time.sleep(delay_off)
 
-# --- Wi-Fi Connection Function ---
+# --- Wi-Fi Connection ---
 def connect_wifi(ssid, password):
     station = network.WLAN(network.STA_IF)
     station.active(True)
@@ -56,20 +54,79 @@ def connect_wifi(ssid, password):
         blink_led(onboard_led, 5, 0.5, 0.1)
         return None, None
 
-# --- Main HIL Logic ---
+# --- Robot State Variables ---
 line_left = False
 line_center = False
 line_right = False
-current_state = 'stop' # Initial state
-last_known_turn_direction = 'left'
+current_state = 'stop'
 loop_counter = 0
 
-# Grid positions for path planning
-current_grid_pos = (0, 0)  # Start position
-goal_grid_pos = (12, 16)   # End position
+# --- Path Planning Setup ---
+# Define your start and goal positions (grid coordinates)
+START_NODE = (0, 0)      # Change these to your desired start/goal
+GOAL_NODE = (12, 16)     # positions in the grid
 
-# Initialize path planner
 path_planner = PathPlanner()
+current_path = []
+path_index = 0
+at_intersection = False
+last_intersection_time = 0
+INTERSECTION_COOLDOWN = 2000  # ms to prevent multiple intersection detections
+
+print(f"Planning path from {START_NODE} to {GOAL_NODE}")
+planned_path = path_planner.find_path(START_NODE, GOAL_NODE)
+if planned_path:
+    print(f"Path found with {len(planned_path)} nodes: {planned_path}")
+    current_path = planned_path
+else:
+    print("No path found! Check your start/goal positions.")
+
+def get_next_direction():
+    """Get the next movement direction based on current position in path"""
+    global path_index, current_path
+    
+    if not current_path or path_index >= len(current_path) - 1:
+        return 'stop'  # Reached end or no path
+    
+    current_pos = current_path[path_index]
+    next_pos = current_path[path_index + 1]
+    
+    # Calculate direction vector
+    dx = next_pos[1] - current_pos[1]  # Column difference (x-direction)
+    dy = next_pos[0] - current_pos[0]  # Row difference (y-direction)
+    
+    # Map direction to robot command
+    if dx == 1:      # Moving right
+        return 'turn_right_gentle'
+    elif dx == -1:   # Moving left
+        return 'turn_left_gentle'
+    elif dy == 1:    # Moving down
+        return 'forward'
+    elif dy == -1:   # Moving up
+        return 'forward'
+    else:
+        return 'forward'  # Default case
+
+def update_path_progress():
+    """Update progress along the planned path when at intersections"""
+    global path_index, at_intersection, last_intersection_time
+    
+    current_time = time.ticks_ms()
+    
+    # Detect intersection (all sensors see line)
+    if line_left and line_center and line_right:
+        if not at_intersection and time.ticks_diff(current_time, last_intersection_time) > INTERSECTION_COOLDOWN:
+            at_intersection = True
+            last_intersection_time = current_time
+            
+            # Advance to next node in path
+            if path_index < len(current_path) - 1:
+                path_index += 1
+                print(f"Reached intersection! Moving to node {path_index}: {current_path[path_index]}")
+            else:
+                print("Reached final destination!")
+    else:
+        at_intersection = False
 
 # --- Start Wi-Fi Connection ---
 wlan_station, esp32_ip = connect_wifi(WIFI_SSID, WIFI_PASSWORD)
@@ -83,7 +140,7 @@ if wlan_station and wlan_station.isconnected():
         server_socket.bind(addr)
         server_socket.listen(1)
         print(f"TCP Server listening on {esp32_ip}:{PORT}")
-        if onboard_led: onboard_led.on() # LED on solid while listening
+        if onboard_led: onboard_led.on()
     except OSError as e:
         print(f"Error creating server socket: {e}")
         if server_socket: server_socket.close()
@@ -93,150 +150,103 @@ if wlan_station and wlan_station.isconnected():
         client_socket = None
         client_address = None
         try:
-            print("Waiting for Webots (TCP client) to connect...")
+            print("Waiting for Webots to connect...")
             client_socket, client_address = server_socket.accept()
             print(f"Webots connected from: {client_address}")
             if onboard_led: onboard_led.off()
             blink_led(onboard_led, 2, 0.05, 0.05)
 
-            # Send initial state once upon connection
+            # Send initial state
             try:
-                print(f"ESP Sending initial command to Webots: '{current_state}'")
                 client_socket.sendall((current_state + '\n').encode('utf-8'))
-            except OSError as e_init_send:
-                print(f"Error sending initial command: {e_init_send}")
-                raise # Re-raise to close client socket and re-listen
+            except OSError as e:
+                print(f"Error sending initial command: {e}")
+                raise
 
-            while True: # Communication loop with this client
+            while True:  # Main communication loop
                 loop_counter += 1
+                
                 # 1. Receive sensor data from Webots
                 try:
-                    client_socket.settimeout(5.0) # Timeout for receiving
+                    client_socket.settimeout(5.0)
                     data_bytes = client_socket.recv(128)
-                    client_socket.settimeout(None) # Reset timeout
+                    client_socket.settimeout(None)
 
                     if not data_bytes:
-                        print("Webots disconnected (received empty data).")
+                        print("Webots disconnected.")
                         break 
                     
                     sensor_msg = data_bytes.decode('utf-8').strip()
-                    if len(sensor_msg) == 3: # Expecting "LCR"
-                        line_left = (sensor_msg[0] == '1')
-                        line_center = (sensor_msg[1] == '1')
-                        line_right = (sensor_msg[2] == '1')
-                    else:
-                        if sensor_msg: # Print if not empty but malformed
-                             print(f"ESP Warning: Rcvd malformed sensor data: '{sensor_msg}'")
-                        # If malformed, reuse previous sensor states or default to search?
-                        # For now, just continue; previous sensor states will be used.
-                        pass
+                    
+                    # Parse the message format: "LCR|OBS|x,y,theta"
+                    parts = sensor_msg.split('|')
+                    if len(parts) >= 1:
+                        line_data = parts[0]
+                        if len(line_data) == 3:
+                            line_left = (line_data[0] == '1')
+                            line_center = (line_data[1] == '1')
+                            line_right = (line_data[2] == '1')
 
-                except OSError as e_recv:
-                    print(f"Error receiving data or Webots timeout: {e_recv}")
+                except OSError as e:
+                    print(f"Error receiving data: {e}")
                     break 
-                except Exception as e_recv_gen:
-                    print(f"Generic error receiving data: {e_recv_gen}")
+                except Exception as e:
+                    print(f"Generic error receiving data: {e}")
                     break
                 
-                # 2. Parse sensor data from Webots
-                sensor_data = sensor_msg.split('|')
-                if len(sensor_data) >= 3:
-                    # Parse line sensor data
-                    line_sensor_data = sensor_data[0]
-                    if len(line_sensor_data) == 3:
-                        line_left = (line_sensor_data[0] == '1')
-                        line_center = (line_sensor_data[1] == '1')
-                        line_right = (line_sensor_data[2] == '1')
-                    
-                    # Parse obstacle data
-                    obstacle_data = sensor_data[1]
-                    path_planner.update_obstacles(obstacle_data)
-                    
-                    # Parse position data
-                    try:
-                        pos_data = sensor_data[2].split(',')
-                        if len(pos_data) == 3:
-                            x, y, theta = map(float, pos_data)
-                            path_planner.update_position(x, y, theta)
-                    except:
-                        print("Error parsing position data")
-
-                # 3. Determine Robot State using Path Planner
-                previous_internal_state = current_state # For logging change
+                # 2. Update path progress
+                update_path_progress()
                 
-                if line_left and line_center and line_right:  # At intersection
-                    # Update grid position based on previous moves
-                    if current_state == 'forward':
-                        if last_known_turn_direction == 'up':
-                            current_grid_pos = (current_grid_pos[0]-1, current_grid_pos[1])
-                        elif last_known_turn_direction == 'down':
-                            current_grid_pos = (current_grid_pos[0]+1, current_grid_pos[1])
-                        elif last_known_turn_direction == 'left':
-                            current_grid_pos = (current_grid_pos[0], current_grid_pos[1]-1)
-                        elif last_known_turn_direction == 'right':
-                            current_grid_pos = (current_grid_pos[0], current_grid_pos[1]+1)
+                # 3. Determine robot state using line following + Dijkstra guidance
+                previous_state = current_state
                 
-                # Get next move from path planner
-                planned_move = path_planner.get_next_move(current_grid_pos, goal_grid_pos)
-                
-                # Combine path planning with line following behavior
-                if not line_left and line_center and not line_right: # 010
+                if path_index >= len(current_path) - 1:
+                    # Reached destination
+                    current_state = 'stop'
+                elif not line_left and line_center and not line_right:  # 010 - On line
                     current_state = 'forward'
-                elif line_left and line_center and not line_right:   # 110
-                    current_state = planned_move if planned_move == 'turn_left_gentle' else 'forward'
-                    if current_state == 'turn_left_gentle':
-                        last_known_turn_direction = 'left'
-                elif not line_left and line_center and line_right:   # 011
-                    current_state = planned_move if planned_move == 'turn_right_gentle' else 'forward'
-                    if current_state == 'turn_right_gentle':
-                        last_known_turn_direction = 'right'
-                elif line_left and not line_center and not line_right: # 100
+                elif line_left and line_center and not line_right:   # 110 - Gentle left
+                    next_dir = get_next_direction()
+                    current_state = next_dir if next_dir == 'turn_left_gentle' else 'forward'
+                elif not line_left and line_center and line_right:   # 011 - Gentle right  
+                    next_dir = get_next_direction()
+                    current_state = next_dir if next_dir == 'turn_right_gentle' else 'forward'
+                elif line_left and not line_center and not line_right: # 100 - Sharp left
                     current_state = 'turn_left_sharp'
-                    last_known_turn_direction = 'left'
-                elif not line_left and not line_center and line_right: # 001
+                elif not line_left and not line_center and line_right: # 001 - Sharp right
                     current_state = 'turn_right_sharp'
-                    last_known_turn_direction = 'right'
-                elif line_left and line_center and line_right:       # 111 (Junction)
-                    # Use path planner's recommendation at intersections
-                    current_state = planned_move
-                    if planned_move == 'turn_left_gentle':
-                        last_known_turn_direction = 'left'
-                    elif planned_move == 'turn_right_gentle':
-                        last_known_turn_direction = 'right'
-                elif not line_left and not line_center and not line_right: # 000
+                elif line_left and line_center and line_right:       # 111 - Intersection
+                    # Use Dijkstra's guidance at intersections
+                    current_state = get_next_direction()
+                elif not line_left and not line_center and not line_right: # 000 - Lost
                     current_state = 'search'
-                elif line_left and not line_center and line_right: # 101
+                elif line_left and not line_center and line_right: # 101 - Confused
                     current_state = 'search'
                 
-                state_changed_this_cycle = (current_state != previous_internal_state)
-                if state_changed_this_cycle or loop_counter % 200 == 1 :
-                    print(f"ESP Logic: Sensors LCR={int(line_left)}{int(line_center)}{int(line_right)}, Prev='{previous_internal_state}', NewState='{current_state}'")
+                # Log state changes
+                if current_state != previous_state or loop_counter % 200 == 1:
+                    sensor_str = f"{int(line_left)}{int(line_center)}{int(line_right)}"
+                    print(f"Sensors: {sensor_str}, Path: {path_index}/{len(current_path)-1}, State: {current_state}")
 
-                # 3. ALWAYS Send the current determined state to Webots
+                # 4. Send command to Webots
                 try:
-                    # Optional: print only if state changed to reduce verbosity
-                    # if state_changed_this_cycle:
-                    #    print(f"ESP Sending command: '{current_state}'")
                     client_socket.sendall((current_state + '\n').encode('utf-8'))
-                except OSError as e_send:
-                    print(f"Error sending command (Webots likely disconnected): {e_send}")
+                except OSError as e:
+                    print(f"Error sending command: {e}")
                     break 
-                except Exception as e_send_gen:
-                    print(f"Generic error sending command: {e_send_gen}")
-                    break
                 
-                time.sleep(0.02) # Loop rate for ESP32's decision making
+                time.sleep(0.02)  # Control loop rate
 
-        except OSError as e: # Errors from server_socket.accept() or initial send
-            print(f"Socket accepting/initial send error: {e}")
-        except Exception as e_outer:
-            print(f"An unexpected error occurred in client handling: {e_outer}")
+        except OSError as e:
+            print(f"Socket error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
         finally:
             if client_socket:
-                print("Closing client socket with Webots.")
                 client_socket.close()
-            print("ESP32 is now waiting for a new Webots connection...")
-            if onboard_led: onboard_led.on() 
+            print("Waiting for new connection...")
+            if onboard_led: onboard_led.on()
 else:
-    print("ESP32: Wi-Fi not connected. HIL Server cannot start.")
-    while True: blink_led(onboard_led, 1, 0.2, 0.2)
+    print("Wi-Fi not connected. Cannot start server.")
+    while True: 
+        blink_led(onboard_led, 1, 0.2, 0.2)

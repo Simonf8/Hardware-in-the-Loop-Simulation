@@ -1,201 +1,189 @@
 """
-Path planner for line following robot using Dijkstra's Algorithm.
-This is used to find optimal paths through a grid representation of the line following course.
+Simplified Path Planner for ESP32/MicroPython using Dijkstra's Algorithm
+No NumPy dependencies - uses only built-in Python data structures
 """
-import heapq
 
 class PathPlanner:
     def __init__(self):
-        # Grid size for this specific line following course
-        self.GRID_ROWS = 13
-        self.GRID_COLS = 17
-        self.dynamic_obstacles = set()  # Set to store coordinates of dynamic obstacles
-        self.robot_position = (0, 0)    # Current robot position in grid coordinates
-        self.reset_grid()
-
-    def update_position(self, x, y, theta):
-        """Update robot's position based on encoder data"""
-        # Convert real-world coordinates to grid coordinates
-        grid_x = int(x * 10)  # Assuming 1 grid cell = 0.1 meters
-        grid_y = int(y * 10)
-        
-        if 0 <= grid_x < self.GRID_ROWS and 0 <= grid_y < self.GRID_COLS:
-            self.robot_position = (grid_x, grid_y)
-            return True
-        return False
-
-    def update_obstacles(self, obstacle_data):
-        """Update dynamic obstacles based on sensor data
-        Args:
-            obstacle_data: String of '0's and '1's for left, front, right sensors
-        """
-        self.dynamic_obstacles.clear()  # Clear old dynamic obstacles
-        
-        # Calculate potential obstacle positions based on sensor data and robot position
-        x, y = self.robot_position
-        if len(obstacle_data) >= 3:
-            if obstacle_data[0] == '1':  # Left obstacle
-                self.dynamic_obstacles.add((x, y-1))
-            if obstacle_data[1] == '1':  # Front obstacle
-                self.dynamic_obstacles.add((x-1, y))
-            if obstacle_data[2] == '1':  # Right obstacle
-                self.dynamic_obstacles.add((x, y+1))
-
-    def reset_grid(self):
-        """Initialize the grid representation of the course"""
+        # Simple grid representation - 0 = path, 1 = obstacle
+        # Adjust this grid to match your actual line course layout
         self.grid = [
-            [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-            [0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0],
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]
-        ]
-        # Cost map - we'll give turns slightly higher cost to prefer straight paths
-        self.costs = [[1] * self.GRID_COLS for _ in range(self.GRID_ROWS)]
-        # Add higher costs at turns and intersections
-        for i in range(1, self.GRID_ROWS-1):
-            for j in range(1, self.GRID_COLS-1):
-                if self.is_intersection(i, j):
-                    self.costs[i][j] = 2
-
-    def is_intersection(self, row, col):
-        """Check if a point is an intersection or turn"""
-        if self.grid[row][col] != 0:  # Must be on the line
-            return False
-            
-        neighbors = [
-            (row-1, col), (row+1, col),  # Up, Down
-            (row, col-1), (row, col+1)   # Left, Right
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 0
+            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],  # Row 1
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 2
+            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],  # Row 3
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 4
+            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],  # Row 5
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 6
+            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],  # Row 7
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 8
+            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],  # Row 9
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 10
+            [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],  # Row 11
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Row 12
         ]
         
-        valid_neighbors = 0
-        for r, c in neighbors:
-            if (0 <= r < self.GRID_ROWS and 
-                0 <= c < self.GRID_COLS and 
-                self.grid[r][c] == 0):
-                valid_neighbors += 1
+        self.rows = len(self.grid)
+        self.cols = len(self.grid[0])
         
-        return valid_neighbors > 2  # More than 2 valid paths = intersection
-
-    def find_path(self, start_pos, goal_pos):
+        # Cost for moving to each cell (can be modified for different terrain)
+        self.movement_cost = 1
+        self.turn_cost = 1.2  # Slightly higher cost for turns
+        
+    def is_valid_position(self, row, col):
+        """Check if position is within grid bounds and not an obstacle"""
+        return (0 <= row < self.rows and 
+                0 <= col < self.cols and 
+                self.grid[row][col] == 0)
+    
+    def get_neighbors(self, pos):
+        """Get valid neighboring positions (up, down, left, right)"""
+        row, col = pos
+        neighbors = []
+        
+        # Check 4 directions: up, down, left, right
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        
+        for dr, dc in directions:
+            new_row, new_col = row + dr, col + dc
+            if self.is_valid_position(new_row, new_col):
+                neighbors.append((new_row, new_col))
+        
+        return neighbors
+    
+    def calculate_cost(self, current_pos, next_pos, came_from):
+        """Calculate movement cost (can add turn penalties)"""
+        base_cost = self.movement_cost
+        
+        # Add turn penalty if direction changes
+        if came_from and came_from in came_from:
+            prev_pos = came_from[current_pos]
+            if prev_pos:
+                # Calculate if this is a turn
+                prev_dir = (current_pos[0] - prev_pos[0], current_pos[1] - prev_pos[1])
+                curr_dir = (next_pos[0] - current_pos[0], next_pos[1] - current_pos[1])
+                if prev_dir != curr_dir:
+                    base_cost = self.turn_cost
+        
+        return base_cost
+    
+    def find_path(self, start, goal):
         """
-        Find shortest path from start to goal using Dijkstra's algorithm
-        
-        Args:
-            start_pos: Tuple of (row, col) for start position
-            goal_pos: Tuple of (row, col) for goal position
-        
-        Returns:
-            List of (row, col) tuples forming the path
+        Find shortest path using Dijkstra's algorithm
+        Returns list of (row, col) tuples from start to goal
         """
-        if not (0 <= start_pos[0] < self.GRID_ROWS and 
-               0 <= start_pos[1] < self.GRID_COLS and
-               0 <= goal_pos[0] < self.GRID_ROWS and 
-               0 <= goal_pos[1] < self.GRID_COLS):
-            print("Invalid start or goal position")
+        if not self.is_valid_position(start[0], start[1]):
+            print(f"Invalid start position: {start}")
             return []
-            
-        if (self.grid[start_pos[0]][start_pos[1]] != 0 or 
-            self.grid[goal_pos[0]][goal_pos[1]] != 0):
-            print("Start or goal position is not on a valid path")
+        
+        if not self.is_valid_position(goal[0], goal[1]):
+            print(f"Invalid goal position: {goal}")
             return []
-
-        # Priority queue for Dijkstra's algorithm
-        queue = [(0, start_pos)]
-        heapq.heapify(queue)
         
-        # Track visited nodes and their parents
-        visited = set()
-        parents = {start_pos: None}
-        distances = {start_pos: 0}
+        if start == goal:
+            return [start]
         
-        found_goal = False
+        # Initialize data structures
+        # Using list as priority queue (not as efficient as heapq but works in MicroPython)
+        open_set = [(0, start)]  # (cost, position)
+        came_from = {}
+        cost_so_far = {start: 0}
         
-        while queue and not found_goal:
-            current_dist, current_pos = heapq.heappop(queue)
+        while open_set:
+            # Find node with lowest cost (manual priority queue)
+            current_cost, current = min(open_set)
+            open_set.remove((current_cost, current))
             
-            if current_pos in visited:
-                continue
+            if current == goal:
+                # Reconstruct path
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append(start)
+                path.reverse()
+                return path
+            
+            # Check all neighbors
+            for neighbor in self.get_neighbors(current):
+                new_cost = cost_so_far[current] + self.calculate_cost(current, neighbor, came_from)
                 
-            visited.add(current_pos)
-            
-            if current_pos == goal_pos:
-                found_goal = True
-                break
-                
-            # Check neighbors (up, down, left, right)
-            neighbors = [
-                (current_pos[0]-1, current_pos[1]),  # Up
-                (current_pos[0]+1, current_pos[1]),  # Down
-                (current_pos[0], current_pos[1]-1),  # Left
-                (current_pos[0], current_pos[1]+1)   # Right
-            ]
-            
-            for next_pos in neighbors:
-                if (0 <= next_pos[0] < self.GRID_ROWS and 
-                    0 <= next_pos[1] < self.GRID_COLS and 
-                    self.grid[next_pos[0]][next_pos[1]] == 0):
-                    
-                    new_dist = current_dist + self.costs[next_pos[0]][next_pos[1]]
-                    
-                    if next_pos not in distances or new_dist < distances[next_pos]:
-                        distances[next_pos] = new_dist
-                        parents[next_pos] = current_pos
-                        heapq.heappush(queue, (new_dist, next_pos))
+                if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
+                    cost_so_far[neighbor] = new_cost
+                    came_from[neighbor] = current
+                    open_set.append((new_cost, neighbor))
         
-        if not found_goal:
-            print("No path found from start to goal")
-            return []
-            
-        # Reconstruct path
-        path = []
-        current = goal_pos
-        while current is not None:
-            path.append(current)
-            current = parents.get(current)
+        print("No path found!")
+        return []
+    
+    def print_grid_with_path(self, path):
+        """Debug function to visualize the grid and path"""
+        if not path:
+            print("No path to display")
+            return
         
-        path.reverse()
-        return path
-
-    def get_next_move(self, current_pos, goal_pos):
-        """
-        Get the next movement direction based on current position and goal
+        # Create a copy of the grid for display
+        display_grid = []
+        for row in self.grid:
+            display_grid.append(row[:])  # Copy row
         
-        Args:
-            current_pos: Tuple of (row, col) for current position
-            goal_pos: Tuple of (row, col) for goal position
-            
-        Returns:
-            String indicating next movement: 'forward', 'turn_left', 'turn_right', etc.
-        """
-        path = self.find_path(current_pos, goal_pos)
+        # Mark path on display grid
+        for i, (row, col) in enumerate(path):
+            if i == 0:
+                display_grid[row][col] = 'S'  # Start
+            elif i == len(path) - 1:
+                display_grid[row][col] = 'G'  # Goal
+            else:
+                display_grid[row][col] = '*'  # Path
         
+        # Print grid
+        print("Grid with path (* = path, S = start, G = goal, 1 = obstacle):")
+        for row in display_grid:
+            print(''.join(str(cell) for cell in row))
+    
+    def get_path_directions(self, path):
+        """Convert path to movement directions"""
         if len(path) < 2:
-            return 'stop'  # No path or already at goal
+            return []
+        
+        directions = []
+        for i in range(len(path) - 1):
+            current = path[i]
+            next_pos = path[i + 1]
             
-        # Get current and next position
-        curr = path[0]
-        next_pos = path[1]
+            dr = next_pos[0] - current[0]
+            dc = next_pos[1] - current[1]
+            
+            if dr == -1:  # Moving up
+                directions.append('up')
+            elif dr == 1:  # Moving down
+                directions.append('down')
+            elif dc == -1:  # Moving left
+                directions.append('left')
+            elif dc == 1:  # Moving right
+                directions.append('right')
         
-        # Determine direction based on difference
-        row_diff = next_pos[0] - curr[0]
-        col_diff = next_pos[1] - curr[1]
-        
-        if row_diff == -1:  # Moving up
-            return 'forward'
-        elif row_diff == 1:  # Moving down
-            return 'forward'
-        elif col_diff == -1:  # Moving left
-            return 'turn_left_gentle'
-        elif col_diff == 1:  # Moving right
-            return 'turn_right_gentle'
-        
-        return 'stop'
+        return directions
+
+# Test function for debugging
+def test_pathfinder():
+    """Test the pathfinder with a simple example"""
+    planner = PathPlanner()
+    
+    start = (0, 0)
+    goal = (12, 16)
+    
+    print(f"Finding path from {start} to {goal}")
+    path = planner.find_path(start, goal)
+    
+    if path:
+        print(f"Path found with {len(path)} steps:")
+        print(path)
+        directions = planner.get_path_directions(path)
+        print(f"Directions: {directions}")
+        planner.print_grid_with_path(path)
+    else:
+        print("No path found!")
+
+# Uncomment to test
+# test_pathfinder()
