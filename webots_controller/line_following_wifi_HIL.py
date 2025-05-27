@@ -3,6 +3,7 @@
 from controller import Robot
 import socket
 import time
+from math import cos, sin
 
 # --- Network Configuration ---
 # !!! USER ACTION REQUIRED: Update this with your ESP32's IP address !!!
@@ -39,6 +40,35 @@ for name in sensor_names:
     else: sensor_device.enable(timestep); ground_sensors.append(sensor_device)
 if len(ground_sensors) != 3: print(f"❌ Error: Expected 3 ground sensors, found {len(ground_sensors)}."); exit(1)
 print("✅ Webots: All 3 ground sensors initialized.")
+
+# Initialize distance sensors (for obstacle detection)
+distance_sensor_names = ['ds_left', 'ds_front', 'ds_right']
+distance_sensors = []
+for name in distance_sensor_names:
+    sensor = robot.getDevice(name)
+    if sensor is None: 
+        print(f"⚠️ Warning: Distance sensor '{name}' not found.")
+    else: 
+        sensor.enable(timestep)
+        distance_sensors.append(sensor)
+print(f"✅ Webots: {len(distance_sensors)} distance sensors initialized.")
+
+# Initialize wheel encoders
+left_encoder = robot.getDevice('left wheel sensor')
+right_encoder = robot.getDevice('right wheel sensor')
+if left_encoder and right_encoder:
+    left_encoder.enable(timestep)
+    right_encoder.enable(timestep)
+    print("✅ Webots: Wheel encoders initialized.")
+else:
+    print("⚠️ Warning: Wheel encoders not found.")
+
+# Robot physical parameters for position tracking
+WHEEL_RADIUS = 0.0205  # meters
+AXLE_LENGTH = 0.052    # meters
+position = {'x': 0.0, 'y': 0.0, 'theta': 0.0}  # Robot's position and orientation
+last_left_encoder = 0.0
+last_right_encoder = 0.0
 
 # 4) Network Client Setup
 client_socket = None
@@ -89,10 +119,49 @@ while robot.step(timestep) != -1:
         time.sleep(0.1) # Prevent busy-looping connection retries too fast
         continue
 
-    # a) Read sensors and binarize
+    # a) Read sensors and process data
+    # Ground sensors
     raw_sensor_values = [s.getValue() for s in ground_sensors]
     on_line_flags = [value < LINE_THRESHOLD for value in raw_sensor_values]
-    sensor_message_to_esp32 = "".join(['1' if flag else '0' for flag in on_line_flags])
+    
+    # Distance sensors
+    obstacle_distances = [s.getValue() if s else float('inf') for s in distance_sensors]
+    obstacles_detected = [d < 0.1 for d in obstacle_distances]  # Detect obstacles within 10cm
+    
+    # Update position using encoder values
+    if left_encoder and right_encoder:
+        # Get current encoder values
+        left_wheel_ticks = left_encoder.getValue()
+        right_wheel_ticks = right_encoder.getValue()
+        
+        # Calculate wheel movements
+        left_wheel_delta = left_wheel_ticks - last_left_encoder
+        right_wheel_delta = right_wheel_ticks - last_right_encoder
+        
+        # Update last encoder values
+        last_left_encoder = left_wheel_ticks
+        last_right_encoder = right_wheel_ticks
+        
+        # Calculate distance traveled by each wheel
+        left_distance = left_wheel_delta * WHEEL_RADIUS
+        right_distance = right_wheel_delta * WHEEL_RADIUS
+        
+        # Calculate robot movement
+        distance = (left_distance + right_distance) / 2.0
+        rotation = (right_distance - left_distance) / AXLE_LENGTH
+        
+        # Update position
+        position['theta'] += rotation
+        position['x'] += distance * cos(position['theta'])
+        position['y'] += distance * sin(position['theta'])
+
+    # Create message for ESP32 including line sensors, obstacles, and position
+    message_parts = [
+        "".join(['1' if flag else '0' for flag in on_line_flags]),  # Line sensors
+        "".join(['1' if obs else '0' for obs in obstacles_detected]),  # Obstacle sensors
+        f"{position['x']:.3f},{position['y']:.3f},{position['theta']:.3f}"  # Position
+    ]
+    sensor_message_to_esp32 = "|".join(message_parts)
 
     # b) Send to ESP32
     try:
