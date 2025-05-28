@@ -58,3 +58,17 @@ Adjust `CYCLES_FOR_...` in `main.py` based on Webots motor speeds:
 - Visualize path in real-time
 - Select start/goal via web interface
 EOF
+
+## Grid Calibration (Added May 28, 2025)
+
+If the robot's grid position doesn't match the actual position in Webots:
+
+1. Set `CALIBRATION_MODE = True` in the controller to see grid cell coordinates
+2. Update these parameters in `line_following_wifi_HIL.py`:
+   - `GRID_ORIGIN_X` and `GRID_ORIGIN_Z`: World coordinates for cell (0,0)
+   - `X_OFFSET` and `Z_OFFSET`: Fine-tuning offsets
+   - `GRID_CELL_SIZE`: Distance between grid cells (default 0.05m)
+3. For the bottom-left start layout, ensure cell (0,0) is at the bottom left corner
+4. The goal position is set at `WEBOTS_TARGET_GOAL_ROW` and `WEBOTS_TARGET_GOAL_COL`
+
+Note: The ESP32 grid maps must match the Webots grid map for proper path planning.

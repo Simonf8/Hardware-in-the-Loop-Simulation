@@ -7,8 +7,8 @@ import uheapq # For Dijkstra's priority queue
 from machine import Pin
 
 # --- Wi-Fi Configuration ---
-WIFI_SSID = "YOUR_WIFI_SSID"        # <<<<<<<<<<< CHANGE THIS
-WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"  # <<<<<<<<<<< CHANGE THIS
+WIFI_SSID = "CJ"        # <<<<<<<<<<< CHANGE THIS
+WIFI_PASSWORD = "4533simon"  # <<<<<<<<<<< CHANGE THIS
 # --------------------------
 
 # --- Server Configuration ---
@@ -21,14 +21,20 @@ ONBOARD_LED_PIN = 2
 GRID_ROWS = 13
 GRID_COLS = 17
 
-world_grid = [ # 0: Free space, 1: Obstacle
-    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1], [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],
-    [0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0], [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],
-    [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0], [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],
-    [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0]
+world_grid = [ # 0: Free space, 1: Obstacle - Updated for bottom-left start layout
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 0 (bottom)
+    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 1
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 2
+    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 3
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 4
+    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 5
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 6
+    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 7
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 8
+    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 9
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 10
+    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 11
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]  # Row 12 (top) - The end point is on the right
 ]
 
 movement_costs = [ # 
@@ -40,14 +46,7 @@ movement_costs = [ #
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ]
-# If your Jupyter notebook had different values at specific indices for costs (like 10 or 20),
-# ensure they are correctly placed here based on 0-indexed rows/columns.
-# For example, notebook costs[2][6] = 10 means movement_costs[2][6] = 10
-# And costs[6][3] = 10 (row 6, col 3) -> movement_costs[6][3] = 10
-# And costs[9][8] = 20 (row 9, col 8) -> movement_costs[9][8] = 20
-# And costs[10][9] = 10 (row 10, col 9) -> movement_costs[10][9] = 10
-# Ensure the `movement_costs` array here correctly reflects those specific high-cost cells.
-# Correcting based on the notebook's second cost example:
+
 movement_costs[2][6] = 10
 movement_costs[6][3] = 10
 movement_costs[9][8] = 20 # This was the cell with cost 20 in notebook
