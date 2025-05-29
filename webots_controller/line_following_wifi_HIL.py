@@ -430,18 +430,19 @@ while robot.step(timestep) != -1:
                              print(f"Webots RX GOTO: New target ({new_target_r},{new_target_c}). Old/Current: ({target_cell_r_from_esp},{target_cell_c_from_esp}), WasMoving: {robot_is_moving_to_target_cell}")
                         target_cell_r_from_esp, target_cell_c_from_esp = new_target_r, new_target_c
                         robot_is_moving_to_target_cell = True
-                        use_esp_direct_speeds = False # GOTO command implies grid navigation, not direct speeds
+                        use_esp_direct_speeds = False 
                     except Exception as eg:
                         print(f"Webots Warn: Parse GOTO fail: '{msg}', E:{eg}")
-                elif msg.startswith("SPEEDS:"): # NEW: Handle direct speed commands
+                elif msg.startswith("SPEEDS:"): 
                     try:
                         speeds_str = msg.split(":", 1)[1].split(',')
                         if len(speeds_str) == 2:
                             esp_commanded_left_speed = float(speeds_str[0])
                             esp_commanded_right_speed = float(speeds_str[1])
                             use_esp_direct_speeds = True
-                            robot_is_moving_to_target_cell = False # Direct speeds override GOTO logic
-                            print(f"Webots RX SPEEDS: L={esp_commanded_left_speed:.2f}, R={esp_commanded_right_speed:.2f}")
+                            robot_is_moving_to_target_cell = False 
+                            if webots_loop_counter % 5 == 1 or esp_commanded_left_speed != 0 or esp_commanded_right_speed != 0: # Print if moving or periodically
+                                print(f"Webots RX SPEEDS: L={esp_commanded_left_speed:.2f}, R={esp_commanded_right_speed:.2f}")
                         else:
                             print(f"Webots Warn: Parse SPEEDS fail, wrong parts: '{msg}'")
                     except Exception as es:
@@ -449,17 +450,15 @@ while robot.step(timestep) != -1:
                 elif msg == "stop":
                     print(f"Webots RX: STOP command from ESP.")
                     robot_is_moving_to_target_cell = False
-                    use_esp_direct_speeds = True # Ensure robot stops
+                    use_esp_direct_speeds = True 
                     esp_commanded_left_speed = 0.0
                     esp_commanded_right_speed = 0.0
                     target_cell_r_from_esp, target_cell_c_from_esp = -1, -1 
                     break 
                 else: 
-                    print(f"⚠️ Webots: Unhandled msg from ESP32: '{msg}'")
+                    print(f"⚠️ Webots: Unhandled msg from ESP32: '{msg}' (repr: {repr(msg)})") # Added repr for debugging
     except socket.timeout: 
         if webots_loop_counter % 100 == 1: print("Webots: Timeout receiving from ESP32. Continuing with last command/state.")
-        # If timeout, continue with current GOTO or last direct speeds if applicable
-        # use_esp_direct_speeds flag will persist if it was set by a previous SPEEDS command
         pass 
     except Exception as e:
         print(f"❌ Webots: Recv Error: {e}. Disconnecting.")
@@ -473,13 +472,12 @@ while robot.step(timestep) != -1:
     left_speed_cmd, right_speed_cmd = 0.0, 0.0
 
     if use_esp_direct_speeds:
-        # ESP32 is controlling speeds directly (e.g., for line following)
         left_speed_cmd = esp_commanded_left_speed
         right_speed_cmd = esp_commanded_right_speed
-        if webots_loop_counter % 10 == 1: # Print periodically when under direct speed control
-             print(f"Debug DirectSpeeds: L={left_speed_cmd:.2f}, R={right_speed_cmd:.2f}")
+        # Optional: Print direct speeds if they are non-zero or periodically
+        # if webots_loop_counter % 10 == 1 and (left_speed_cmd != 0 or right_speed_cmd != 0):
+        #      print(f"Debug DirectSpeeds Applied: L={left_speed_cmd:.2f}, R={right_speed_cmd:.2f}")
     elif robot_is_moving_to_target_cell and target_cell_r_from_esp != -1: 
-        # Grid navigation logic (GOTO command)
         target_world_x, target_world_z = grid_cell_to_world_center(target_cell_r_from_esp, target_cell_c_from_esp)
         delta_x_to_target = target_world_x - robot_pose['x']
         delta_z_to_target = target_world_z - robot_pose['y']
@@ -515,7 +513,6 @@ while robot.step(timestep) != -1:
             else: 
                 left_speed_cmd = MAX_SPEED_CELL_NAV
                 right_speed_cmd = MAX_SPEED_CELL_NAV
-    # else: Robot is stopped (no GOTO, no direct SPEEDS, or STOP command received)
             
     left_motor.setVelocity(left_speed_cmd)
     right_motor.setVelocity(right_speed_cmd)
