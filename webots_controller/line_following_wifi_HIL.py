@@ -31,10 +31,10 @@ WEBOTS_TARGET_GOAL_COL = 0
 # -----------------------------------------------------------------------
 
 # --- Robot Control Configuration ---
-MAX_SPEED_CELL_NAV = 3.28
-TURN_SPEED_CELL_NAV = 2.8  # Max speed for rotating
-DIST_TO_CELL_THRESHOLD = GRID_CELL_SIZE * 0.35
-ANGLE_TO_CELL_THRESHOLD = 0.08 # Radians (approx 4.5 degrees)
+MAX_SPEED_CELL_NAV = 3.28 # Max speed for GOTO commands
+TURN_SPEED_CELL_NAV = 2.8  # Max speed for turning during GOTO commands
+DIST_TO_CELL_THRESHOLD = GRID_CELL_SIZE * 0.35 # How close to cell center to consider "near"
+ANGLE_TO_CELL_THRESHOLD = 0.08 # Radians (approx 4.5 degrees) for alignment for forward motion during GOTO
 
 # --- Line Sensor Configuration ---
 LINE_THRESHOLD = 600  # Values BELOW this are considered "on the line" (typical for IR)
@@ -109,7 +109,6 @@ def update_live_map_plot_grid(current_odom_pose_dict, current_grid_cell_tuple_rc
             ax_map.plot([wx, wx],
                         [eff_plot_origin_z, eff_plot_origin_z + GRID_ROWS * GRID_CELL_SIZE],
                         'k-', alpha=0.2, lw=0.7, zorder=0)
-        # Initialize function attributes if they don't exist
         if not hasattr(update_live_map_plot_grid, 'static_artists_drawn'):
             update_live_map_plot_grid.static_artists_drawn = False # type: ignore
         if not hasattr(update_live_map_plot_grid, 'initial_obstacles_drawn'):
@@ -274,12 +273,16 @@ setup_client_connection()
 
 # --- Main Loop ---
 webots_loop_counter = 0
-target_cell_r_from_esp, target_cell_c_from_esp = -1, -1
-robot_is_moving_to_target_cell = False
+target_cell_r_from_esp, target_cell_c_from_esp = -1, -1 # For GOTO commands
+robot_is_moving_to_target_cell = False # Flag for GOTO navigation state
+# Variables for direct speed commands from ESP32
+esp_commanded_left_speed = 0.0
+esp_commanded_right_speed = 0.0
+use_esp_direct_speeds = False # Flag to indicate if ESP is controlling speeds directly
 
-r_start_sim, c_start_sim = 0,16 # Default start cell
+r_start_sim, c_start_sim = 0,16 # Default start cell from your log
 initial_world_x, initial_world_z = grid_cell_to_world_center(r_start_sim, c_start_sim)
-initial_theta = math.pi / 2.0  # Default: Facing positive Z 
+initial_theta = math.pi / 2.0  # Default: Facing positive Z (as per your log's 90 deg)
 
 robot_pose['x'] = initial_world_x
 robot_pose['y'] = initial_world_z
@@ -399,7 +402,7 @@ while robot.step(timestep) != -1:
         continue
     
     # --- Receive and Process Commands from ESP32 ---
-    command_from_esp32_processed_this_cycle = False 
+    use_esp_direct_speeds = False # Reset flag each cycle
     try:
         data_bytes = client_sock.recv(256) 
         if not data_bytes:
@@ -411,7 +414,7 @@ while robot.step(timestep) != -1:
             for msg_part in messages:
                 msg = msg_part.strip()
                 if not msg: continue
-                command_from_esp32_processed_this_cycle = True 
+                
                 if msg.startswith("PATH_GRID:"):
                     try:
                         path_str_payload = msg.split(":", 1)[1]
@@ -426,18 +429,37 @@ while robot.step(timestep) != -1:
                         if new_target_r != target_cell_r_from_esp or new_target_c != target_cell_c_from_esp or not robot_is_moving_to_target_cell:
                              print(f"Webots RX GOTO: New target ({new_target_r},{new_target_c}). Old/Current: ({target_cell_r_from_esp},{target_cell_c_from_esp}), WasMoving: {robot_is_moving_to_target_cell}")
                         target_cell_r_from_esp, target_cell_c_from_esp = new_target_r, new_target_c
-                        robot_is_moving_to_target_cell = True 
+                        robot_is_moving_to_target_cell = True
+                        use_esp_direct_speeds = False # GOTO command implies grid navigation, not direct speeds
                     except Exception as eg:
                         print(f"Webots Warn: Parse GOTO fail: '{msg}', E:{eg}")
+                elif msg.startswith("SPEEDS:"): # NEW: Handle direct speed commands
+                    try:
+                        speeds_str = msg.split(":", 1)[1].split(',')
+                        if len(speeds_str) == 2:
+                            esp_commanded_left_speed = float(speeds_str[0])
+                            esp_commanded_right_speed = float(speeds_str[1])
+                            use_esp_direct_speeds = True
+                            robot_is_moving_to_target_cell = False # Direct speeds override GOTO logic
+                            print(f"Webots RX SPEEDS: L={esp_commanded_left_speed:.2f}, R={esp_commanded_right_speed:.2f}")
+                        else:
+                            print(f"Webots Warn: Parse SPEEDS fail, wrong parts: '{msg}'")
+                    except Exception as es:
+                        print(f"Webots Warn: Parse SPEEDS fail: '{msg}', E:{es}")
                 elif msg == "stop":
                     print(f"Webots RX: STOP command from ESP.")
                     robot_is_moving_to_target_cell = False
+                    use_esp_direct_speeds = True # Ensure robot stops
+                    esp_commanded_left_speed = 0.0
+                    esp_commanded_right_speed = 0.0
                     target_cell_r_from_esp, target_cell_c_from_esp = -1, -1 
                     break 
-                elif msg: 
+                else: 
                     print(f"⚠️ Webots: Unhandled msg from ESP32: '{msg}'")
     except socket.timeout: 
-        if webots_loop_counter % 100 == 1: print("Webots: Timeout receiving from ESP32. Continuing with last GOTO if active.")
+        if webots_loop_counter % 100 == 1: print("Webots: Timeout receiving from ESP32. Continuing with last command/state.")
+        # If timeout, continue with current GOTO or last direct speeds if applicable
+        # use_esp_direct_speeds flag will persist if it was set by a previous SPEEDS command
         pass 
     except Exception as e:
         print(f"❌ Webots: Recv Error: {e}. Disconnecting.")
@@ -449,7 +471,15 @@ while robot.step(timestep) != -1:
 
     # --- Execute Movement Command ---
     left_speed_cmd, right_speed_cmd = 0.0, 0.0
-    if robot_is_moving_to_target_cell and target_cell_r_from_esp != -1: 
+
+    if use_esp_direct_speeds:
+        # ESP32 is controlling speeds directly (e.g., for line following)
+        left_speed_cmd = esp_commanded_left_speed
+        right_speed_cmd = esp_commanded_right_speed
+        if webots_loop_counter % 10 == 1: # Print periodically when under direct speed control
+             print(f"Debug DirectSpeeds: L={left_speed_cmd:.2f}, R={right_speed_cmd:.2f}")
+    elif robot_is_moving_to_target_cell and target_cell_r_from_esp != -1: 
+        # Grid navigation logic (GOTO command)
         target_world_x, target_world_z = grid_cell_to_world_center(target_cell_r_from_esp, target_cell_c_from_esp)
         delta_x_to_target = target_world_x - robot_pose['x']
         delta_z_to_target = target_world_z - robot_pose['y']
@@ -459,9 +489,20 @@ while robot.step(timestep) != -1:
                                       math.cos(angle_to_target_center - robot_pose['theta']))
         
         if webots_loop_counter % 20 == 2: 
-            print(f"Debug Motion (Grid): To ({target_cell_r_from_esp},{target_cell_c_from_esp}). Dist: {distance_to_target_center:.3f}, AngleDiff: {math.degrees(angle_difference):.1f} deg.")
+            print(f"Debug Motion (Grid): To ({target_cell_r_from_esp},{target_cell_c_from_esp}). Dist: {distance_to_target_center:.3f}, AngleDiff: {math.degrees(angle_difference):.1f} deg. MappedCell: ({current_r_mapped},{current_c_mapped})")
 
-        if distance_to_target_center > DIST_TO_CELL_THRESHOLD:
+        is_at_target_cell_center_dist = distance_to_target_center <= DIST_TO_CELL_THRESHOLD
+        is_in_correct_mapped_cell = (current_r_mapped, current_c_mapped) == (target_cell_r_from_esp, target_cell_c_from_esp)
+
+        if is_at_target_cell_center_dist and is_in_correct_mapped_cell:
+            print(f"Webots: Correctly ARRIVED at cell ({target_cell_r_from_esp},{target_cell_c_from_esp}). Robot grid pos: ({current_r_mapped},{current_c_mapped})")
+            robot_is_moving_to_target_cell = False 
+            left_speed_cmd, right_speed_cmd = 0.0, 0.0
+        elif is_at_target_cell_center_dist and not is_in_correct_mapped_cell:
+            print(f"Webots: Near target ({target_cell_r_from_esp},{target_cell_c_from_esp}) center, BUT mapped to ({current_r_mapped},{current_c_mapped}). Stopping. ESP32 should replan.")
+            robot_is_moving_to_target_cell = False 
+            left_speed_cmd, right_speed_cmd = 0.0, 0.0
+        else: 
             if abs(angle_difference) > ANGLE_TO_CELL_THRESHOLD: 
                 turn_effort_gain = 25.0 
                 turn_scaling_factor = angle_difference * turn_effort_gain 
@@ -474,10 +515,7 @@ while robot.step(timestep) != -1:
             else: 
                 left_speed_cmd = MAX_SPEED_CELL_NAV
                 right_speed_cmd = MAX_SPEED_CELL_NAV
-        else: 
-            print(f"Webots: Arrived at cell ({target_cell_r_from_esp},{target_cell_c_from_esp}). Robot grid pos: ({current_r_mapped},{current_c_mapped})")
-            robot_is_moving_to_target_cell = False 
-            left_speed_cmd, right_speed_cmd = 0.0, 0.0
+    # else: Robot is stopped (no GOTO, no direct SPEEDS, or STOP command received)
             
     left_motor.setVelocity(left_speed_cmd)
     right_motor.setVelocity(right_speed_cmd)
