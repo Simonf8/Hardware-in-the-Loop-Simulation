@@ -1,4 +1,4 @@
-# main.py (ESP32 Code) - Grid-Based Dijkstra with Obstacle Updates
+# main.py (ESP32 Code) - Grid-Based Dijkstra with Obstacle Updates & Corrected Parser
 
 import network
 import socket
@@ -8,8 +8,8 @@ from machine import Pin
 import uasyncio as asyncio # For concurrent handling of server and potential obstacle messages
 
 # --- Wi-Fi Configuration ---
-WIFI_SSID = "YOUR_WIFI_SSID"  # <<<<<<<<<<< CHANGE THIS
-WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"  # <<<<<<<<<<< CHANGE THIS
+WIFI_SSID = "CJ"  # <<<<<<<<<<< CHANGE THIS
+WIFI_PASSWORD = "4533simon"  # <<<<<<<<<<< CHANGE THIS
 # --------------------------
 
 # --- Server Configuration ---
@@ -22,50 +22,52 @@ ONBOARD_LED_PIN = 2  # Common for many ESP32 boards
 GRID_ROWS = 13
 GRID_COLS = 17
 
-# Initial world grid. This can be updated dynamically if obstacles are reported.
+# Updated world grid to match your new layout (horizontally flipped to correct coordinate mapping)
 # 0: Free space, 1: Obstacle
 world_grid = [
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 0 (bottom)
-    [0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 1 - Cell (1,1) is 0
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 2
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 3
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 4
-    [0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 5 - Cell (5,1) is NOW 0
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 6
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 7
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 8
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 9
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # Row 10
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0], # Row 11
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]  # Row 12 (top) - Ensure goal (12,16) is 0
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]   # Row 12 (top) - flipped
 ]
-# Explicitly ensure the typical goal cell (12,16) is traversable
-if 0 <= 12 < GRID_ROWS and 0 <= 16 < GRID_COLS:
-    world_grid[12][16] = 0
-# Explicitly ensure common start cells (0,0), (1,1) and now (5,1) are traversable
+
+# Explicitly ensure common navigable cells are free
 if 0 <= 0 < GRID_ROWS and 0 <= 0 < GRID_COLS:
     world_grid[0][0] = 0
-if 0 <= 1 < GRID_ROWS and 0 <= 1 < GRID_COLS:
-    world_grid[1][1] = 0
-if 0 <= 5 < GRID_ROWS and 0 <= 1 < GRID_COLS:
-    world_grid[5][1] = 0 # Corrected (5,1) to be navigable
+if 0 <= 12 < GRID_ROWS and 0 <= 10 < GRID_COLS: # Assuming 10 is a valid target column
+    world_grid[12][10] = 0
 
-# Movement costs (can also be dynamic if needed, but static for now)
+# Updated movement costs to match your new layout
 movement_costs = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,2],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], # Cost for row 5, col 1 is 1
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,2],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 0
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 1
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 2
+    [2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2], # Row 3
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 4
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 5
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 6
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 7
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 8
+    [2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2], # Row 9
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 10
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Row 11
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # Row 12
 ]
-# You might want to ensure movement_costs[5][1] is also reasonable (e.g., 1) if it was different.
-# The default above already has it as 1.
-movement_costs[2][6] = 10
-movement_costs[6][3] = 10
-movement_costs[9][8] = 20
-movement_costs[10][9] = 10
+
+# Additional high-cost cells for specific locations (if desired)
+if 0 <= 2 < GRID_ROWS and 0 <= 6 < GRID_COLS: movement_costs[2][6] = 10
+if 0 <= 6 < GRID_ROWS and 0 <= 3 < GRID_COLS: movement_costs[6][3] = 10
+if 0 <= 9 < GRID_ROWS and 0 <= 8 < GRID_COLS: movement_costs[9][8] = 20
+if 0 <= 10 < GRID_ROWS and 0 <= 9 < GRID_COLS: movement_costs[10][9] = 10
 # -----------------------------------------------------------------------
 
 # --- Global State Variables ---
@@ -93,90 +95,60 @@ def blink_led(pin, times=1, delay_on=0.1, delay_off=0.1):
 
 # --- Dijkstra's Algorithm ---
 def dijkstra_grid(grid, costs, start_cell, goal_cell):
-    """
-    Finds the shortest path in a grid using Dijkstra's algorithm.
-    Args:
-        grid (list of lists): The grid map (0 for free, 1 for obstacle).
-        costs (list of lists): The cost to move into each cell.
-        start_cell (tuple): (row, col) of the starting cell.
-        goal_cell (tuple): (row, col) of the goal cell.
-    Returns:
-        list of tuples: The path from start to goal, or None if no path.
-    """
     rows, cols = len(grid), len(grid[0])
-
-    # Validate start cell
     if not (0 <= start_cell[0] < rows and 0 <= start_cell[1] < cols and grid[start_cell[0]][start_cell[1]] == 0):
-        print(f"Dijkstra Error: Start cell {start_cell} is invalid or an obstacle. Grid value: {grid[start_cell[0]][start_cell[1]]}")
+        print(f"Dijkstra Error: Start cell {start_cell} is invalid or an obstacle. Grid val: {grid[start_cell[0]][start_cell[1]] if (0 <= start_cell[0] < rows and 0 <= start_cell[1] < cols) else 'OOB'}")
         return None
-    # Validate goal cell
     if not (0 <= goal_cell[0] < rows and 0 <= goal_cell[1] < cols and grid[goal_cell[0]][goal_cell[1]] == 0):
-        print(f"Dijkstra Error: Goal cell {goal_cell} is invalid or an obstacle. Grid value: {grid[goal_cell[0]][goal_cell[1]]}")
+        print(f"Dijkstra Error: Goal cell {goal_cell} is invalid or an obstacle. Grid val: {grid[goal_cell[0]][goal_cell[1]] if (0 <= goal_cell[0] < rows and 0 <= goal_cell[1] < cols) else 'OOB'}")
         return None
 
-    pq = []  # Priority queue: (distance, cell_tuple)
+    pq = []
     uheapq.heappush(pq, (0, start_cell))
-
-    distances = {start_cell: 0}  # Shortest distance from start to cell
-    predecessors = {start_cell: None}  # Preceding cell in the shortest path
-
-    # Directions: Up, Down, Left, Right (and optionally diagonals)
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Row, Col changes
+    distances = {start_cell: 0}
+    predecessors = {start_cell: None}
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
     while pq:
         dist, current_cell_tuple = uheapq.heappop(pq)
-
         if dist > distances.get(current_cell_tuple, float('inf')):
-            continue # Already found a shorter path to this cell
-
+            continue
         if current_cell_tuple == goal_cell:
-            break  # Goal reached
-
+            break
         r_curr, c_curr = current_cell_tuple
-
         for dr, dc in directions:
-            nr, nc = r_curr + dr, c_curr + dc  # Neighbor row, col
-
-            if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 0:  # Check bounds and if traversable
-                # Cost to move to the neighbor cell
-                move_cost = costs[nr][nc] # Cost to ENTER neighbor cell
+            nr, nc = r_curr + dr, c_curr + dc
+            if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 0:
+                move_cost = costs[nr][nc]
                 new_distance = dist + move_cost
-
                 if new_distance < distances.get((nr, nc), float('inf')):
                     distances[(nr, nc)] = new_distance
                     predecessors[(nr, nc)] = current_cell_tuple
                     uheapq.heappush(pq, (new_distance, (nr, nc)))
-
     if goal_cell not in distances or distances[goal_cell] == float('inf'):
         print(f"Dijkstra: No path found from {start_cell} to {goal_cell}.")
         return None
-
-    # Reconstruct path
     path = []
     step = goal_cell
     while step is not None:
         path.append(step)
         step = predecessors.get(step)
     path.reverse()
-
     return path if path and path[0] == start_cell else None
-
 
 # --- Wi-Fi Connection ---
 def connect_wifi(ssid, password):
-    """Connects the ESP32 to Wi-Fi."""
     station = network.WLAN(network.STA_IF)
     station.active(True)
     if not station.isconnected():
         print(f"Connecting to Wi-Fi (SSID: {ssid})...")
         station.connect(ssid, password)
         attempts = 0
-        while not station.isconnected() and attempts < 20: # 10 seconds timeout
+        while not station.isconnected() and attempts < 20:
             print(".", end="")
             blink_led(onboard_led, 1, 0.1, 0.4)
             attempts += 1
             time.sleep(0.5)
-
     if station.isconnected():
         ip_address = station.ifconfig()[0]
         print(f"\nWi-Fi Connected! ESP32 IP Address: {ip_address}")
@@ -184,12 +156,11 @@ def connect_wifi(ssid, password):
         return station, ip_address
     else:
         print("\nFailed to connect to Wi-Fi.")
-        blink_led(onboard_led, 5, 0.5, 0.1) # Long blinks for failure
+        blink_led(onboard_led, 5, 0.5, 0.1)
         return None, None
 
-# --- TCP Server and Client Handling ---
+# --- TCP Server and Client Handling (Corrected Parser) ---
 async def handle_client(reader, writer):
-    """Handles communication with a single Webots client."""
     global g_robot_current_cell_r, g_robot_current_cell_c, g_goal_cell_r, g_goal_cell_c
     global g_current_path, g_path_step_index, g_needs_new_plan, world_grid
 
@@ -197,7 +168,6 @@ async def handle_client(reader, writer):
     print(f"Webots connected from: {client_addr}")
     if onboard_led: onboard_led.off(); blink_led(onboard_led, 2, 0.05, 0.05)
 
-    # Reset state for new client
     g_robot_current_cell_r, g_robot_current_cell_c = -1, -1
     g_goal_cell_r, g_goal_cell_c = -1, -1
     g_current_path = None
@@ -208,104 +178,143 @@ async def handle_client(reader, writer):
     try:
         while True:
             loop_iter_count += 1
-            command_to_send_webots = "stop" # Default command
+            command_to_send_webots = "stop" 
+            pos_data_processed_this_cycle = False
+            gs_data_received_this_cycle = {} 
 
-            # 1. Receive Message from Webots (POS or OBSTACLE)
             try:
-                # Set a timeout for reading to prevent indefinite blocking
-                raw_data = await asyncio.wait_for(reader.read(256), timeout=5.0) # Increased buffer, 5s timeout
+                raw_data = await asyncio.wait_for(reader.read(256), timeout=5.0)
                 if not raw_data:
                     print("Webots disconnected (empty data).")
                     break
                 
                 full_data_str = raw_data.decode('utf-8')
+                # Webots might send multiple messages if ESP is slow to read, or one combined message
+                # Example: "OBSTACLE:r,c\nGS:l,m,r;POS:cr,cc,gr,gc\n" or "GS:l,m,r;POS:cr,cc,gr,gc\n"
+                
                 lines = full_data_str.splitlines()
-                pos_data_processed_this_cycle = False
-
-                for line in reversed(lines): # Process latest relevant message first
-                    current_line_cleaned = line.strip()
+                
+                for line_idx in range(len(lines) -1, -1, -1): # Process from last complete line first
+                    current_line_cleaned = lines[line_idx].strip()
                     if not current_line_cleaned:
                         continue
 
-                    if current_line_cleaned.startswith("POS:"):
-                        if pos_data_processed_this_cycle: continue # Already got POS this cycle
+                    # Initialize parts for current line
+                    gs_part_str = None
+                    pos_part_str = None
+                    obstacle_part_str = None
 
-                        # print(f"ESP RX POS: {current_line_cleaned}") # Can be noisy, enable for debug
-                        pos_data_processed_this_cycle = True
+                    # Split the line by known message prefixes if they exist
+                    # A single line could contain multiple message types if Webots concatenates them
+                    # e.g. "OBSTACLE:r,c\nGS:l,m,r;POS:cr,cc,gr,gc"
+                    # For simplicity, we assume Webots sends one primary message type per line OR
+                    # a combined GS;POS message. If OBSTACLE is sent, it's usually on its own line.
+
+                    if current_line_cleaned.startswith("OBSTACLE:"):
+                        obstacle_part_str = current_line_cleaned
+                    elif current_line_cleaned.startswith("GS:"):
+                        parts = current_line_cleaned.split(';', 1)
+                        gs_part_str = parts[0]
+                        if len(parts) > 1 and "POS:" in parts[1]:
+                            pos_part_str = parts[1] # POS part follows GS
+                    elif "POS:" in current_line_cleaned: # Could be standalone POS:
+                         # Check if it's part of a GS;POS structure that wasn't caught above
+                        if ";" in current_line_cleaned and current_line_cleaned.split(';',1)[0].startswith("GS:"):
+                            # Already handled by "GS:" check if combined
+                            pass
+                        else: # Likely standalone POS:
+                            pos_part_str = current_line_cleaned
+
+
+                    # Process Obstacle
+                    if obstacle_part_str:
+                        print(f"ESP RX OBSTACLE: {obstacle_part_str}")
                         try:
-                            payload = current_line_cleaned.split(":", 1)[1]
-                            parts = payload.split(',')
-                            if len(parts) == 4:
-                                temp_r, temp_c = int(parts[0]), int(parts[1])
-                                temp_gr, temp_gc = int(parts[2]), int(parts[3])
-
-                                # Check if position or goal changed, or if a new plan is explicitly needed
-                                if (g_robot_current_cell_r, g_robot_current_cell_c) != (temp_r, temp_c) or \
-                                   (g_goal_cell_r, g_goal_cell_c) != (temp_gr, temp_gc) or \
-                                   g_robot_current_cell_r == -1 or g_needs_new_plan:
-                                    g_needs_new_plan = True # Set flag to re-plan
-
-                                g_robot_current_cell_r, g_robot_current_cell_c = temp_r, temp_c
-                                g_goal_cell_r, g_goal_cell_c = temp_gr, temp_gc
-                            else:
-                                print(f"ESP Err: POS bad parts: {parts} (from '{current_line_cleaned}')")
-                        except Exception as ep:
-                            print(f"ESP Err parsing POS: '{current_line_cleaned}', Ex: {ep}")
-                    
-                    elif current_line_cleaned.startswith("OBSTACLE:"):
-                        print(f"ESP RX OBSTACLE: {current_line_cleaned}")
-                        try:
-                            payload = current_line_cleaned.split(":", 1)[1]
+                            payload = obstacle_part_str.split(":", 1)[1]
                             parts = payload.split(',')
                             if len(parts) == 2:
                                 obs_r, obs_c = int(parts[0]), int(parts[1])
                                 if 0 <= obs_r < GRID_ROWS and 0 <= obs_c < GRID_COLS:
-                                    if world_grid[obs_r][obs_c] == 0: # If it was previously free
-                                        world_grid[obs_r][obs_c] = 1 # Mark as obstacle
+                                    if world_grid[obs_r][obs_c] == 0:
+                                        world_grid[obs_r][obs_c] = 1
                                         print(f"ESP: Updated grid. Obstacle at ({obs_r},{obs_c}). Re-planning needed.")
-                                        g_needs_new_plan = True # Crucial: Force re-plan
-                                    # else: # Already known or out of bounds, no need to print unless debugging
-                                    #     print(f"ESP: Obstacle at ({obs_r},{obs_c}) already known or out of bounds.")
+                                        g_needs_new_plan = True
                                 else:
                                     print(f"ESP Err: OBSTACLE coords out of bounds: ({obs_r},{obs_c})")
                             else:
-                                print(f"ESP Err: OBSTACLE bad parts: {parts} (from '{current_line_cleaned}')")
+                                print(f"ESP Err: OBSTACLE bad parts: {parts} (from '{obstacle_part_str}')")
                         except Exception as eo:
-                            print(f"ESP Err parsing OBSTACLE: '{current_line_cleaned}', Ex: {eo}")
-                    # Add other message types here if needed (e.g., "RESET_GRID:")
+                            print(f"ESP Err parsing OBSTACLE: '{obstacle_part_str}', Ex: {eo}")
+                    
+                    # Process Ground Sensor Data
+                    if gs_part_str:
+                        try:
+                            gs_payload = gs_part_str.split(':', 1)[1] 
+                            gs_values = [int(v) for v in gs_payload.split(',')]
+                            if len(gs_values) == 3:
+                                gs_data_received_this_cycle = {'l': gs_values[0], 'm': gs_values[1], 'r': gs_values[2]}
+                                if loop_iter_count % 10 == 0 : print(f"ESP Parsed GS: {gs_data_received_this_cycle}") # Debug less frequently
+                            else:
+                                print(f"ESP Err: GS bad parts count: {len(gs_values)} from '{gs_payload}'")
+                        except Exception as e_gs:
+                            print(f"ESP Err parsing GS part: '{gs_part_str}', Ex: {e_gs}")
+                    
+                    # Process Position Data (only once per data batch from Webots)
+                    if pos_part_str and not pos_data_processed_this_cycle:
+                        try:
+                            pos_payload = pos_part_str.split("POS:", 1)[1] # Get content after "POS:"
+                            parts = pos_payload.split(',')
+                            if len(parts) == 4:
+                                temp_r, temp_c = int(parts[0]), int(parts[1])
+                                temp_gr, temp_gc = int(parts[2]), int(parts[3])
+
+                                if (g_robot_current_cell_r, g_robot_current_cell_c) != (temp_r, temp_c) or \
+                                   (g_goal_cell_r, g_goal_cell_c) != (temp_gr, temp_gc) or \
+                                   g_robot_current_cell_r == -1: 
+                                    g_needs_new_plan = True
+
+                                g_robot_current_cell_r, g_robot_current_cell_c = temp_r, temp_c
+                                g_goal_cell_r, g_goal_cell_c = temp_gr, temp_gc
+                                pos_data_processed_this_cycle = True 
+                                print(f"ESP Parsed POS: Rob({temp_r},{temp_c}) Goal({temp_gr},{temp_gc}), NeedsPlan: {g_needs_new_plan}")
+                            else:
+                                print(f"ESP Err: POS bad parts count: {len(parts)} from '{pos_payload}' (Line: '{current_line_cleaned}')")
+                        except Exception as ep:
+                            print(f"ESP Err parsing POS part: '{pos_part_str}', Ex: {ep}")
+                    
+                    if pos_data_processed_this_cycle: # If POS was found and processed, we're done with this line batch for POS
+                        break
+
 
             except asyncio.TimeoutError:
                 if loop_iter_count % 50 == 0:
-                     pass
+                     print(f"ESP: Timeout waiting for Webots data. Last CMD: '{command_to_send_webots}'")
                 pass
-            except OSError as e: # Catch OSError for network issues like ConnectionResetError
+            except OSError as e: 
                 print(f"ESP Network OSError during read: {e}")
-                break # Exit client handling loop
-            except Exception as e_recv: # Catch any other unexpected errors during receive
+                break 
+            except Exception as e_recv: 
                 print(f"ESP Recv Error: {e_recv}")
                 break
             
             # 2. Plan Path if needed
             if g_needs_new_plan and g_robot_current_cell_r != -1 and g_goal_cell_r != -1:
                 print(f"ESP: Planning from ({g_robot_current_cell_r},{g_robot_current_cell_c}) to ({g_goal_cell_r},{g_goal_cell_c})")
-                # Ensure the goal cell in the current world_grid is not an obstacle before planning
                 if not (0 <= g_goal_cell_r < GRID_ROWS and 0 <= g_goal_cell_c < GRID_COLS and world_grid[g_goal_cell_r][g_goal_cell_c] == 0):
                     print(f"ESP: Goal ({g_goal_cell_r},{g_goal_cell_c}) is an obstacle or invalid in current grid. Cannot plan.")
-                    g_current_path = None # Explicitly clear path
+                    g_current_path = None
                 else:
                     g_current_path = dijkstra_grid(world_grid, movement_costs,
                                                (g_robot_current_cell_r, g_robot_current_cell_c),
                                                (g_goal_cell_r, g_goal_cell_c))
-
                 if g_current_path:
                     print(f"ESP: Path found: {g_current_path}")
-                    g_path_step_index = 0 # Reset path index
+                    g_path_step_index = 0 
                     path_str = "PATH_GRID:" + ";".join([f"{r},{c}" for r, c in g_current_path])
                     try:
                         writer.write((path_str + '\n').encode('utf-8'))
                         await writer.drain()
-                        # print(f"ESP TX PATH: {path_str}") # Can be noisy
-                    except OSError as e_send: # Catch OSError for network issues
+                    except OSError as e_send:
                         print(f"ESP Network OSError sending path: {e_send}")
                         break
                     except Exception as e_send_path:
@@ -317,45 +326,49 @@ async def handle_client(reader, writer):
 
             # 3. Determine Next Move Command
             if g_current_path:
+                # If robot is at the current path step, advance to next step
                 if g_path_step_index < len(g_current_path) and \
                    g_current_path[g_path_step_index] == (g_robot_current_cell_r, g_robot_current_cell_c):
+                    print(f"ESP: Reached step {g_path_step_index}: {g_current_path[g_path_step_index]}. Advancing.")
                     g_path_step_index += 1
                 
                 if g_path_step_index < len(g_current_path):
                     next_r, next_c = g_current_path[g_path_step_index]
                     command_to_send_webots = f"GOTO:{next_r},{next_c}"
-                else: 
+                else: # Path index is at or beyond the end of the path
                     if (g_robot_current_cell_r, g_robot_current_cell_c) == (g_goal_cell_r, g_goal_cell_c):
                         print("ESP: Goal Reached!")
                         command_to_send_webots = "stop"
-                        g_current_path = None 
+                        g_current_path = None # Clear path as goal is reached
                     else:
-                        print("ESP: Path ended, but not at the goal. Stopping. Re-planning might be needed.")
+                        # This case should ideally not happen if path planning and execution are correct
+                        print("ESP: Path ended, but not at goal. Stopping. Forcing re-plan.")
                         command_to_send_webots = "stop"
                         g_current_path = None
                         g_needs_new_plan = True 
-            else: 
+            else: # No current path
                 command_to_send_webots = "stop"
                 if g_robot_current_cell_r != -1 and g_goal_cell_r != -1 and \
                    (g_robot_current_cell_r, g_robot_current_cell_c) != (g_goal_cell_r, g_goal_cell_c):
-                    if loop_iter_count % 10 == 0: 
+                    if loop_iter_count % 10 == 0: # Periodically try to replan if stuck without a path
+                         print("ESP: No current path, not at goal, attempting to trigger re-plan.")
                          g_needs_new_plan = True
 
             # 4. Send Command to Webots
             try:
-                if command_to_send_webots == "stop" or loop_iter_count % 20 == 1 or "GOTO" in command_to_send_webots:
-                    print(f"ESP TX CMD: '{command_to_send_webots}' (L:{loop_iter_count}, PIdx:{g_path_step_index}, NP:{g_needs_new_plan})")
+                if command_to_send_webots == "stop" or "GOTO" in command_to_send_webots or loop_iter_count % 20 == 1 :
+                    print(f"ESP TX CMD: '{command_to_send_webots}' (L:{loop_iter_count}, PIdx:{g_path_step_index}, NP:{g_needs_new_plan}, RobCur:({g_robot_current_cell_r},{g_robot_current_cell_c}), Goal:({g_goal_cell_r},{g_goal_cell_c}))")
                 
                 writer.write((command_to_send_webots + '\n').encode('utf-8'))
                 await writer.drain()
-            except OSError as e_send_cmd: # Catch OSError for network issues
+            except OSError as e_send_cmd:
                 print(f"ESP Network OSError sending cmd: {e_send_cmd}")
                 break 
             except Exception as e_send_cmd_other:
                 print(f"ESP Error sending cmd: {e_send_cmd_other}")
                 break
 
-            await asyncio.sleep_ms(100)
+            await asyncio.sleep_ms(100) # Main loop delay
 
     except Exception as e_main_loop:
         print(f"ESP32: **** Error in client handling loop: {e_main_loop} ****")
@@ -387,7 +400,7 @@ async def main_server():
     print(f"TCP Server listening on {esp32_ip_addr}:{SERVER_PORT}")
     
     while True:
-        await asyncio.sleep(10)
+        await asyncio.sleep(10) # Keep the main_server task alive
 
 if __name__ == "__main__":
     try:
