@@ -2,52 +2,125 @@
 
 # 🤖 Hardware-in-the-Loop (HIL) Robot Navigation System
 
-[![Python Version](https://img.shields.io/badge/Python-3.7%2B-blue.svg)](https://www.python.org/downloads/)
-[![Webots](https://img.shields.io/badge/Webots-R2023a%2B-orange.svg)](https://cyberbotics.com/)
-[![MicroPython](https://img.shields.io/badge/MicroPython-ESP32-green.svg)](https://micropython.org/)
+[![Python](https://img.shields.io/badge/Python-3.7%2B-blue.svg)](https://python.org)
+[![Webots](https://img.shields.io/badge/Webots-R2023a%2B-orange.svg)](https://cyberbotics.com)
+[![MicroPython](https://img.shields.io/badge/MicroPython-ESP32-green.svg)](https://micropython.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-Active-success.svg)]()
 
-*Advanced robotic navigation combining real hardware control with virtual simulation environments*
+*ESP32 hardware controlling virtual Webots robot through intelligent path planning*
 
-![Demo Video](https://img.shields.io/badge/Demo-Available-success?style=for-the-badge&logo=video)
-![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge&logo=checkmarx)
-![Performance](https://img.shields.io/badge/Performance-Optimized-orange?style=for-the-badge&logo=speedtest)
+![Demo Video](https://img.shields.io/badge/🎥_Demo-Available-success?style=for-the-badge)
+![Status](https://img.shields.io/badge/🚀_Status-Active-brightgreen?style=for-the-badge)
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-system-architecture) • [Live Demo](#-live-demo) • [Installation](#-installation) • [Documentation](#-documentation)
+[📋 Features](#features) • [🚀 Quick Start](#quick-start) • [🏗️ Architecture](#architecture) • [⚙️ Setup](#setup)
 
-
-## 🌟 Overview
-
-This project demonstrates a sophisticated **Hardware-in-the-Loop (HIL)** simulation system where an **ESP32 microcontroller** (running MicroPython) intelligently controls a virtual **Webots robot** through Wi-Fi communication. The system features advanced **Dijkstra path planning**, real-time **sensor-based navigation**, and dynamic **grid mapping** with visual feedback.
-
-> **🎥 Want to see it in action?** Check out our [**Live Demo Video**](#-live-demo) showing the complete system working from hardware setup to goal achievement!
-=======
-> **⚠️ **
-> - ❌ Don't submit this as your own work please 
+---
 
 </div>
 
----
-
 ## 🌟 Overview
 
-This project demonstrates a sophisticated **Hardware-in-the-Loop (HIL)** simulation system where an **ESP32 microcontroller** (running MicroPython) intelligently controls a virtual **Webots robot** through Wi-Fi communication. The system features advanced **Dijkstra path planning**, real-time **sensor-based navigation**, and dynamic **grid mapping** with visual feedback.
+Real **ESP32 microcontroller** (MicroPython) controls a virtual **Webots robot** via Wi-Fi, featuring **Dijkstra pathfinding**, **real-time sensor navigation**, and **live visualization**.
 
-> **🎥 Want to see it in action?** Check out our [**📹 Demo Video (demo.mp4)**](./demo.mp4) showing the complete system working from hardware setup to goal achievement!
+### 🎯 Key Features
 
-### 🎯 Key Highlights
-
-- **🔗 Seamless HIL Integration**: Real ESP32 hardware controlling virtual Webots robot
-- **🧭 Smart Path Planning**: Dijkstra's algorithm for optimal route calculation
-- **📡 Wireless Communication**: Robust TCP/IP over Wi-Fi with JSON messaging
-- **👁️ Real-time Visualization**: Live matplotlib dashboard with sensor feedback
-- **🎮 Adaptive Control**: Finite State Machine (FSM) for navigation logic
-- **⚡ Sensor Fusion**: Ground sensor integration for line-following precision
+- 🔗 **HIL Integration** - Real hardware controls virtual simulation
+- 🧭 **Smart Pathfinding** - Dijkstra's algorithm for optimal routes  
+- 📡 **Wireless Control** - TCP/IP over Wi-Fi with JSON messaging
+- 📊 **Live Visualization** - Real-time matplotlib dashboard
+- 🎮 **Adaptive Navigation** - FSM-based movement control
+- ⚡ **Sensor Fusion** - Ground sensor line-following precision
 
 ---
 
-## ✨ Features
+## 🏗️ Architecture
+
+```mermaid
+graph LR
+    A[ESP32<br/>🧠 Brain] --> B[WiFi<br/>📡 Link]
+    B --> C[Webots<br/>🤖 Robot]
+    C --> D[Sensors<br/>👁️ Vision]
+    D --> E[Dashboard<br/>📊 Display]
+    
+    style A fill:#e1f5fe
+    style C fill:#f3e5f5
+    style E fill:#e8f5e8
+```
+
+### 🔄 System Flow
+
+```
+ESP32 Planning → WiFi Communication → Robot Control → Sensor Feedback → Visualization
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1️⃣ Hardware Setup
+```bash
+# Flash MicroPython to ESP32
+# Upload esp32_code/main.py
+```
+
+### 2️⃣ Configure WiFi
+```python
+# Edit esp32_code/main.py
+WIFI_SSID = 'Your_Network'
+WIFI_PASSWORD = 'Your_Password'
+```
+
+### 3️⃣ Run Simulation
+```bash
+# Open Webots → Load world/RaFLite.wbt → Start simulation
+```
+
+---
+
+## ⚙️ Setup
+
+### 📋 Requirements
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| **Webots** | R2023a+ | Robot simulation |
+| **Python** | 3.7+ | Control scripts |
+| **ESP32** | Any | Hardware controller |
+
+### 🔧 Configuration
+
+#### ESP32 Settings (`main.py`)
+```python
+WIFI_SSID = 'Your_Network'
+WIFI_PASSWORD = 'Your_Password'
+GRID_ROWS, GRID_COLS = 15, 19
+```
+
+#### Webots Settings (`line_following_wifi_HIL.py`)
+```python
+FORWARD_SPEED = 1.8
+LINE_THRESHOLD = 600
+ESP32_IP_ADDRESS = "192.168.x.x"
+```
+
+
+
+## 📁 Project Structure
+
+```
+📦 HIL-Robot-Navigation
+├── 🎥 demo_compressed.mp4    # Optimized demo video
+├── 🎬 demo.mp4               # Full quality demo  
+├── 📸 track_layout.png       # Circuit layout
+├── 📁 esp32_code/
+│   └── main.py              # ESP32 MicroPython code
+├── 📁 webots_controller/
+│   └── line_following_wifi_HIL.py  # Robot controller
+└── 📁 world/
+    └── RaFLite.wbt          # Webots simulation world
+```
+
+
 
 ### 🚀 Core Capabilities
 | Feature | Description |
@@ -220,46 +293,9 @@ WIFI_PASSWORD = 'Your_Password'
 # Upload main.py to ESP32 → Open Webots → Load RaFLite.wbt → Start simulation
 ```
 
-### 🎬 Demo Video
-> *The robot navigates from start (0,18) to goal (14,0) using optimal path planning*
-
-```ascii
-🎥 LIVE SIMULATION PREVIEW
-┌─────────────────────────────────────────┐
-│  🤖                    ┌─Goal─┐         │
-│   ↘                   │ (14,0) │        │
-│    ━━━━━━━━━━━━━━━━━━━━┛       │        │
-│                               │        │
-│    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━┛        │
-│    ┃ ESP32 Planning...                │
-│    ┃ 📡 WiFi Connected                │
-│    ┃ 🛤️  Path: 23 waypoints           │
-│    ┃ ⚡ Status: NAVIGATING            │
-│    Start (0,18)                       │
-└─────────────────────────────────────────┘
-```
 
 ---
 
-## 🎭 Live Demo
-
-<div align="center">
-
-### 🎥 System Demonstration Video
-
-**See the HIL Robot Navigation System in Action!**
-
-<video width="720" height="480" controls>
-  <source src="demo_compressed.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-  <p>
-    <a href="demo_compressed.mp4">📥 Download the demo video (2.1MB)</a>
-  </p>
-</video>
-
-**🎬 Multiple Viewing Options:**
-- **[📺 Watch demo_compressed.mp4](./demo_compressed.mp4)** ← Optimized for GitHub (2.1MB)
-- **[🎥 Full Quality Version](./demo.mp4)** ← Original high-quality video (57MB)
 
 *🎯 See the complete HIL robot navigation system working from start to finish!*
 
@@ -269,23 +305,6 @@ WIFI_PASSWORD = 'Your_Password'
 > - Live sensor readings and WiFi communication
 > - Complete navigation from start to goal
 > - Real-time matplotlib visualization dashboard
-
-### 🎬 Alternative Video Access
-
-**Multiple ways to view the demonstration:**
-
-| Method | Description | Action |
-|--------|-------------|--------|
-| 🎥 **GitHub Player** | [`demo.mp4`](./demo.mp4) | Click to view in GitHub's video player |
-| 📥 **Direct Download** | Save to your device | Right-click the link above → "Save As" |
-| 💻 **Local Viewing** | Clone repository | `git clone` then open `demo.mp4` |
-| 🌐 **File Browser** | Repository view | Navigate to file in GitHub interface |
-
-**🔧 If video doesn't play:**
-1. Try refreshing the page
-2. Use a different browser (Chrome/Firefox work best)
-3. Download the file and play locally
-4. Check your internet connection
 
 ---
 ### 🚀 Real-Time System Performance
@@ -799,7 +818,7 @@ We welcome contributions! Here's how to get involved:
 
 ### 🛠️ Development Setup
 ```bash
-git clone https://github.com/yourusername/HIL-Robot-Navigation.git
+git clone https://github.com/Simonf8/HIL-Robot-Navigation.git
 cd HIL-Robot-Navigation
 git checkout -b feature/your-feature-name
 ```
@@ -857,42 +876,17 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ```ascii
     🎖️ CONTRIBUTORS HALL OF FAME 🎖️
    ╔════════════════════════════════════╗
-   ║  👨‍💻 Lead Developer: CJ28           ║
+   ║  👨‍💻 Lead Developer: Claude.ai/Simon ║
    ║  🧠 Algorithm Design: Dijkstra      ║
-   ║  🤖 Hardware Integration: ESP32     ║
+   ║  🤖 Hardware Integration: ESP32/thonny║
    ║  🎮 Simulation Platform: Webots     ║
    ║  📡 Communication: WiFi/JSON       ║
    ║  🎨 Visualization: Matplotlib      ║
    ╚════════════════════════════════════╝
-```
 
-### 🙏 Massive Thanks To:
 
-- **🌟 Open Source Robotics Community** - For endless inspiration and knowledge sharing
-- **🎓 Academic Researchers** - Who paved the way for autonomous navigation  
-- **💡 Stack Overflow Heroes** - For debugging assistance at 3 AM
-- **🤖 Cyberbotics Team** - For creating the amazing Webots platform
-- **🐍 Python Community** - For making programming accessible and fun
-- **⚡ ESP32 Makers** - For powerful yet affordable microcontrollers
+**Built with laziness, and countless hours of debugging**
 
-</div>
-
-### 🎯 Academic Impact
-
-This project demonstrates cutting-edge concepts in:
-- **🔬 Robotics Research** - HIL simulation methodologies
-- **🧮 Algorithm Design** - Efficient pathfinding implementation  
-- **📡 IoT Systems** - Wireless embedded device communication
-- **🎮 Simulation Technology** - Real-time physics and visualization
-- **🤖 Autonomous Systems** - Decision making and control theory
-
----
-
-**🚨 Remember Classmates: Learn from this, don't copy it! Build something even cooler! 🚀**
-
-**Built with ❤️, ☕, and countless hours of debugging**
-
-*If this project inspired you to build something awesome, tag us and show off your creation! 🌟*
 
 [⬆ Back to Top](#-hardware-in-the-loop-hil-robot-navigation-system)
 
