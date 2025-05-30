@@ -33,7 +33,8 @@ This project demonstrates a sophisticated **Hardware-in-the-Loop (HIL)** simulat
 ## 🌟 Overview
 
 This project demonstrates a sophisticated **Hardware-in-the-Loop (HIL)** simulation system where an **ESP32 microcontroller** (running MicroPython) intelligently controls a virtual **Webots robot** through Wi-Fi communication. The system features advanced **Dijkstra path planning**, real-time **sensor-based navigation**, and dynamic **grid mapping** with visual feedback.
->>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
+
+> **🎥 Want to see it in action?** Check out our [**📹 Demo Video (demo.mp4)**](./demo.mp4) showing the complete system working from hardware setup to goal achievement!
 
 ### 🎯 Key Highlights
 
@@ -248,13 +249,14 @@ WIFI_PASSWORD = 'Your_Password'
 
 **See the HIL Robot Navigation System in Action!**
 
-<video width="800" controls>
-  <source src="demo.mp4" type="video/mp4">
-  Your browser does not support the video tag. 
-  <a href="demo.mp4">Download the demo video</a>
-</video>
+![Demo Video Preview](https://img.shields.io/badge/🎥_Click_to_Watch-Demo_Video-blue?style=for-the-badge)
 
-*↑ Watch the complete system demonstration*
+**📱 Click to view the demo video:**
+- **[🎬 Watch demo.mp4](./demo.mp4)** ← Click here to play the video!
+
+> **Note**: GitHub will open the video in its built-in player. If it doesn't play immediately, try downloading it.
+
+*🎯 See the complete HIL robot navigation system working from start to finish!*
 
 > **📹 Video Highlights:**
 > - Real ESP32 hardware controlling virtual Webots robot
@@ -265,11 +267,20 @@ WIFI_PASSWORD = 'Your_Password'
 
 ### 🎬 Alternative Video Access
 
-If the embedded video doesn't display properly:
+**Multiple ways to view the demonstration:**
 
-1. **📥 Direct Download**: [`demo.mp4`](./demo.mp4) - Right-click and "Save As" to download
-2. **💻 Local Viewing**: Clone the repository and open `demo.mp4` with any video player
-3. **🌐 GitHub Preview**: Click the file in the repository browser above
+| Method | Description | Action |
+|--------|-------------|--------|
+| 🎥 **GitHub Player** | [`demo.mp4`](./demo.mp4) | Click to view in GitHub's video player |
+| 📥 **Direct Download** | Save to your device | Right-click the link above → "Save As" |
+| 💻 **Local Viewing** | Clone repository | `git clone` then open `demo.mp4` |
+| 🌐 **File Browser** | Repository view | Navigate to file in GitHub interface |
+
+**🔧 If video doesn't play:**
+1. Try refreshing the page
+2. Use a different browser (Chrome/Firefox work best)
+3. Download the file and play locally
+4. Check your internet connection
 
 ---
 ### 🚀 Real-Time System Performance
