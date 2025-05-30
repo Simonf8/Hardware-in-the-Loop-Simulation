@@ -885,4 +885,3 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
    ╚════════════════════════════════════╝
 
 **Built with laziness, and countless hours of debugging**
-</div>
