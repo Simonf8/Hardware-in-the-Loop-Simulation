@@ -17,26 +17,27 @@ led = Pin(2, Pin.OUT) # ESP32 onboard LED, usually GPIO2
 
 # --- Grid Configuration (Must match Webots) ---
 GRID_ROWS = 15
-GRID_COLS = 17
+GRID_COLS = 19
 # 0 = BLACK LINE (pathable)
 # 1 = WHITE SPACE (obstacle)
 grid_map = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0],  # Row 0
-    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0],  # Row 1
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 2
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 3
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 4
-    [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0],  # Row 5
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 6
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 7
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 8
-    [0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],  # Row 9
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 10
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 11
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 12
-    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1],  # Row 13
-    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1]   # Row 14
+    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 0
+    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 1
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 2
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 3
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 4
+    [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0],  # Row 5
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 6
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 7
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 8
+    [0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],  # Row 9
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 10
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 11
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 12
+    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1],  # Row 13
+    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1]   # Row 14
 ]
+
 
 # --- Path Planning State ---
 current_robot_grid_pos_actual = None # Actual reported by Webots (row, col)
@@ -46,7 +47,7 @@ planned_path = [] # List of (row, col) tuples
 current_path_index = 0
 path_needs_replan = True
 last_replan_time = 0
-REPLAN_INTERVAL_MS = 2000 # Replan path if needed every 2 seconds, or if robot deviates
+REPLAN_INTERVAL_MS = 1000 # Replan path if needed every 2 seconds, or if robot deviates
 
 # --- Dijkstra's Algorithm Implementation ---
 class SimplePriorityQueue:
@@ -223,7 +224,7 @@ def get_action_from_path(robot_pos_on_path, world_theta_rad, webots_line_sensors
 
     # print(f"Path: {current_node_on_path}->{next_node_on_path}. Curr Theta: {math.degrees(current_theta_norm):.1f}, Target Theta: {math.degrees(target_theta_rad):.1f}, Diff: {math.degrees(angle_diff):.1f}")
 
-    ANGLE_THRESHOLD_RAD = math.radians(30) # Threshold to decide if we need to turn or go forward
+    ANGLE_THRESHOLD_RAD = math.radians(40) # Threshold to decide if we need to turn or go forward
 
     if abs(angle_diff) > ANGLE_THRESHOLD_RAD:
         # Positive diff means target is CCW from current -> turn left robot frame
