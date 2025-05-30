@@ -18,8 +18,8 @@
 
 ---
 
-> **⚠️ ** 
-> - ❌ Don't submit this as your own work
+> **⚠️ **
+> - ❌ Don't submit this as your own work please 
 
 </div>
 
@@ -241,22 +241,19 @@ WIFI_PASSWORD = 'Your_Password'
 ### 🚀 Real-Time System Performance
 
 ```mermaid
-gantt
-    title Robot Navigation Timeline
-    dateFormat X
-    axisFormat %s
+flowchart LR
+    A[🔌 Power On] --> B[📡 WiFi Connect]
+    B --> C[🧮 Dijkstra Planning]
+    C --> D[🎯 Path Optimization]
+    D --> E[🤖 Navigation Start]
+    E --> F[🔄 Turn Sequence]
+    F --> G[🛤️ Line Following]
+    G --> H[🎯 Goal Approach]
+    H --> I[✅ Mission Complete]
     
-    section Planning Phase
-    Dijkstra Calculation    :done, plan, 0, 2s
-    Path Optimization      :done, opt, 2s, 3s
-    
-    section Navigation
-    Turn Sequence         :active, turn, 3s, 5s
-    Line Following        :follow, 5s, 15s
-    Goal Approach         :goal, 15s, 18s
-    
-    section Completion
-    Mission Complete      :crit, done, 18s, 19s
+    style A fill:#e1f5fe
+    style I fill:#c8e6c9
+    style E fill:#fff3e0
 ```
 
 ### 📊 Performance Metrics Dashboard
