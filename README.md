@@ -10,24 +10,12 @@
 
 *Advanced robotic navigation combining real hardware control with virtual simulation environments*
 
-<<<<<<< HEAD
-![Demo Video](https://img.shields.io/badge/Demo-Available-success?style=for-the-badge&logo=youtube)
-=======
-![Demo GIF](https://img.shields.io/badge/Demo-Coming%20Soon-blue?style=for-the-badge&logo=youtube)
->>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
+![Demo Video](https://img.shields.io/badge/Demo-Available-success?style=for-the-badge&logo=video)
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge&logo=checkmarx)
 ![Performance](https://img.shields.io/badge/Performance-Optimized-orange?style=for-the-badge&logo=speedtest)
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-system-architecture) • [Live Demo](#-live-demo) • [Installation](#-installation) • [Documentation](#-documentation)
 
----
-
-<<<<<<< HEAD
-> **⚠️ ** 
-> - ❌ Don't submit this as your own work please
-</div>
-
----
 
 ## 🌟 Overview
 
@@ -256,14 +244,17 @@ WIFI_PASSWORD = 'Your_Password'
 
 <div align="center">
 
-<<<<<<< HEAD
 ### 🎥 System Demonstration Video
 
 **See the HIL Robot Navigation System in Action!**
 
-https://github.com/user-attachments/assets/demo.mp4
+<video width="800" controls>
+  <source src="demo.mp4" type="video/mp4">
+  Your browser does not support the video tag. 
+  <a href="demo.mp4">Download the demo video</a>
+</video>
 
-*↑ Click to watch the complete system demonstration*
+*↑ Watch the complete system demonstration*
 
 > **📹 Video Highlights:**
 > - Real ESP32 hardware controlling virtual Webots robot
@@ -272,10 +263,15 @@ https://github.com/user-attachments/assets/demo.mp4
 > - Complete navigation from start to goal
 > - Real-time matplotlib visualization dashboard
 
----
+### 🎬 Alternative Video Access
 
-=======
->>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
+If the embedded video doesn't display properly:
+
+1. **📥 Direct Download**: [`demo.mp4`](./demo.mp4) - Right-click and "Save As" to download
+2. **💻 Local Viewing**: Clone the repository and open `demo.mp4` with any video player
+3. **🌐 GitHub Preview**: Click the file in the repository browser above
+
+---
 ### 🚀 Real-Time System Performance
 
 ```mermaid
@@ -304,17 +300,6 @@ flowchart LR
 | **Sensor Accuracy** | `98.7%` | 🟢 High |
 | **Goal Success Rate** | `100%` | 🟢 Perfect |
 
-<<<<<<< HEAD
-### 🎬 Alternative Video Access
-
-If the embedded video doesn't load properly, you can also:
-
-1. **Download directly**: [`demo.mp4`](./demo.mp4) - Click to download the demo video
-2. **Local viewing**: Clone the repository and open `demo.mp4` with any video player
-3. **Stream online**: Upload to your preferred video platform for sharing
-
-=======
->>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
 </div>
 
 ---
