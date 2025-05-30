@@ -1,319 +1,611 @@
-"""Clean Webots HIL Controller with Live Dashboard and ESP32 Dijkstra Path Planning (Enhanced Turns)"""
+"""
+Clean Webots HIL Controller with Live Dashboard, ESP32 Dijkstra Path Planning,
+Enhanced Turns, Aggressive Line Centering, Syntax Error Fix, and CORRECTED COORDINATE ALIGNMENT.
+Focus: Ensuring consistency between world_grid array and visualization - FIXED COORDINATE SYSTEM.
+"""
 from controller import Robot
 import socket
 import time
 import math
 import matplotlib.pyplot as plt
-# import numpy as np # Not strictly needed in this version after refactor
 import json
 
 # --- Network Configuration ---
-ESP32_IP_ADDRESS = "192.168.53.193"  # UPDATE WITH YOUR ESP32 IP (from your image)
+ESP32_IP_ADDRESS = "192.168.53.193"  # VERIFY THIS IS YOUR ESP32's CURRENT IP
 ESP32_PORT = 8080
 
 # --- Robot Parameters ---
-WHEEL_RADIUS = 0.0205  # meters
-AXLE_LENGTH = 0.052    # meters (distance between wheel centers)
+WHEEL_RADIUS = 0.0205
+AXLE_LENGTH = 0.0610
 
 # --- Grid Configuration (Must match ESP32) ---
 GRID_ROWS = 15
 GRID_COLS = 17
-GRID_CELL_SIZE = 0.06  # meters
-GRID_ORIGIN_X = -0.40
-GRID_ORIGIN_Z = -0.30
+GRID_CELL_SIZE = 0.058
+
+# CRITICAL FIX: These origins should match where your actual arena is positioned in Webots
+# You need to measure these values from your Webots world file
+# These should be the world coordinates of the CENTER of grid cell (0,0)
+GRID_ORIGIN_X = -0.5  # ADJUST THIS - measure from your Webots world
+GRID_ORIGIN_Z = -0.5  # ADJUST THIS - measure from your Webots world
+
+# Alternative: If you know the world coordinates of a specific grid cell, 
+# calculate the origin from there
+# For example, if you know grid cell (7,8) is at world coordinates (0.1, 0.2):
+# GRID_ORIGIN_X = 0.1 - (8 + 0.5) * GRID_CELL_SIZE
+# GRID_ORIGIN_Z = 0.2 - (7 + 0.5) * GRID_CELL_SIZE
+
 GOAL_ROW = 14
 GOAL_COL = 0
 
 # --- Control Parameters ---
-FORWARD_SPEED = 2.8    # rad/s
-TURN_SPEED_FACTOR = 0.7
+FORWARD_SPEED = 2.8
 LINE_THRESHOLD = 600
-LOST_LINE_TURN_SPEED = 1.5
 
 # --- Enhanced Turn Parameters ---
-MIN_INITIAL_SPIN_DURATION = 0.35  # seconds (Tune: time for initial spin)
-MAX_SEARCH_SPIN_DURATION = 2.5    # seconds (Tune: max time to search for line during turn)
-MAX_ADJUST_DURATION = 1.5         # seconds (Tune: max time to adjust on a found line)
-TURN_ADJUST_SPEED_FACTOR = 0.4    # Speed factor for adjusting on line after turn
+TURN_SPEED_FACTOR = 0.8
+MIN_INITIAL_SPIN_DURATION = 0.35
+MAX_SEARCH_SPIN_DURATION = 2.5
+MAX_ADJUST_DURATION = 2.0
+TURN_ADJUST_BASE_SPEED = FORWARD_SPEED * 0.8
 
-# --- Grid map (same as ESP32) ---
+# --- Aggressive Line Centering Parameters ---
+AGGRESSIVE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.3
+MODERATE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.2
+
+# --- world_grid definition ---
+# Ensure this is EXACTLY what your arena layout is.
+# 0 = Black Line (Pathable), 1 = White Space (Obstacle)
 world_grid = [
-    [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 0
-    [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 1
+    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0],  # Row 0
+    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0],  # Row 1
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 2
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],  # Row 3
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],  # Row 4
-    [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0],  # Row 5
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],  # Row 6
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 3
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 4
+    [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0],  # Row 5
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 6
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 7
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],  # Row 8
-    [0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0],  # Row 9
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],  # Row 10
-    [0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],  # Row 11
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 8
+    [0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],  # Row 9
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 10
+    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0],  # Row 11
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 12
     [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1],  # Row 13
     [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1]   # Row 14
 ]
 
-# --- Visualization variables ---
-plt.ion()
-fig = None
-ax = None
-robot_trail_world = []
-planned_path_grid = []
-
-# --- Webots Internal State for Turns ---
-webots_internal_turn_phase = 'NONE' # NONE, INITIATE_SPIN, SEARCHING_LINE, ADJUSTING_ON_LINE
-webots_turn_command_active = None   # Stores the ESP32 turn command ('turn_left' or 'turn_right')
-turn_phase_start_time = 0.0
+plt.ion(); fig = None; ax = None
+robot_trail_world = []; planned_path_grid = []
+webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None; turn_phase_start_time = 0.0
 
 def world_to_grid(world_x, world_z):
-    col = int(round((world_x - GRID_ORIGIN_X) / GRID_CELL_SIZE - 0.5))
-    row = int(round((world_z - GRID_ORIGIN_Z) / GRID_CELL_SIZE - 0.5))
-    return max(0, min(row, GRID_ROWS - 1)), max(0, min(col, GRID_COLS - 1))
+    """Convert world coordinates to grid coordinates with improved precision"""
+    # Calculate relative position from grid origin
+    rel_x = world_x - GRID_ORIGIN_X
+    rel_z = world_z - GRID_ORIGIN_Z
+    
+    # Convert to grid coordinates
+    col = rel_x / GRID_CELL_SIZE
+    row = rel_z / GRID_CELL_SIZE
+    
+    # Round to nearest grid cell for more accurate positioning
+    col = max(0, min(int(round(col)), GRID_COLS - 1))
+    row = max(0, min(int(round(row)), GRID_ROWS - 1))
+    
+    return row, col
 
 def grid_to_world_center(row, col):
-    world_x = GRID_ORIGIN_X + (col + 0.5) * GRID_CELL_SIZE
-    world_z = GRID_ORIGIN_Z + (row + 0.5) * GRID_CELL_SIZE
+    """Convert grid coordinates to world coordinates (center of cell)"""
+    world_x = GRID_ORIGIN_X + col * GRID_CELL_SIZE
+    world_z = GRID_ORIGIN_Z + row * GRID_CELL_SIZE
     return world_x, world_z
 
-def update_visualization(robot_world_pose, current_robot_grid_pos, path_from_esp32):
+def get_robot_position_from_webots(robot):
+    """Get the actual robot position from Webots supervisor (if available)"""
+    # This is for future improvement - requires supervisor node
+    # For now, we use the odometry calculation
+    pass
+
+def get_line_centered_position(rwp, crgp, ldf):
+    """
+    VISUALIZATION FIX: Always show robot centered on black line when sensors detect line.
+    IGNORE the world_grid array completely - trust the sensors as ground truth!
+    """
+    sensors_on_line = any(ldf)  # Check if any sensor detects line
+    
+    if not sensors_on_line:  # If no sensors detect line, use actual position
+        return rwp['x'], rwp['z']
+    
+    # OVERRIDE: If sensors detect line, ALWAYS center on current grid cell
+    # regardless of what world_grid says, because sensors are ground truth!
+    
+    # Get center of current grid cell
+    grid_center_x, grid_center_z = grid_to_world_center(crgp[0], crgp[1])
+    
+    # Strong centering when sensors detect line - ignore world_grid completely
+    blend_factor = 0.9  # Very strong centering for clean visualization
+    
+    display_x = rwp['x'] * (1 - blend_factor) + grid_center_x * blend_factor
+    display_z = rwp['z'] * (1 - blend_factor) + grid_center_z * blend_factor
+    
+    return display_x, display_z
+
+def update_visualization(rwp, crgp, path_esp):
     global fig, ax, robot_trail_world, planned_path_grid
     if fig is None:
-        fig, ax = plt.subplots(figsize=(14, 10)); ax.set_aspect('equal')
+        fig, ax = plt.subplots(figsize=(14,10))
+        ax.set_aspect('equal')
         ax.set_title('🤖 HIL Robot Dijkstra Path Planning 🎯 (Webots View)', fontsize=16, fontweight='bold')
-        ax.set_xlabel('World X (m)'); ax.set_ylabel('World Z (m)')
-        for r_idx in range(GRID_ROWS + 1):
-            z_coord = GRID_ORIGIN_Z + r_idx * GRID_CELL_SIZE
-            ax.plot([GRID_ORIGIN_X, GRID_ORIGIN_X + GRID_COLS * GRID_CELL_SIZE], [z_coord, z_coord], 'k-', alpha=0.2, lw=0.5)
-        for c_idx in range(GRID_COLS + 1):
-            x_coord = GRID_ORIGIN_X + c_idx * GRID_CELL_SIZE
-            ax.plot([x_coord, x_coord], [GRID_ORIGIN_Z, GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE], 'k-', alpha=0.2, lw=0.5)
-        for r_idx in range(GRID_ROWS):
-            for c_idx in range(GRID_COLS):
-                wx_cell, wz_cell = grid_to_world_center(r_idx, c_idx)
-                cell_color = 'black' if world_grid[r_idx][c_idx] == 0 else 'lightgrey'
-                alpha_val = 0.6 if world_grid[r_idx][c_idx] == 0 else 0.3
-                rect = plt.Rectangle((wx_cell - GRID_CELL_SIZE / 2, wz_cell - GRID_CELL_SIZE / 2), GRID_CELL_SIZE, GRID_CELL_SIZE, facecolor=cell_color, alpha=alpha_val, edgecolor='gray', lw=0.5)
+        ax.set_xlabel('World X (m)')
+        ax.set_ylabel('World Z (m)')
+        
+        # Draw grid lines
+        for r_idx in range(GRID_ROWS+1):
+            z_line = GRID_ORIGIN_Z + r_idx * GRID_CELL_SIZE
+            ax.plot([GRID_ORIGIN_X, GRID_ORIGIN_X + GRID_COLS * GRID_CELL_SIZE], 
+                   [z_line, z_line], 'k-', alpha=0.2, lw=0.5)
+        
+        for c_idx in range(GRID_COLS+1):
+            x_line = GRID_ORIGIN_X + c_idx * GRID_CELL_SIZE
+            ax.plot([x_line, x_line], 
+                   [GRID_ORIGIN_Z, GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE], 
+                   'k-', alpha=0.2, lw=0.5)
+        
+        # Draw grid cells
+        for r_idx_draw in range(GRID_ROWS):
+            for c_idx_draw in range(GRID_COLS):
+                wcx, wcz = grid_to_world_center(r_idx_draw, c_idx_draw)
+                cell_val = world_grid[r_idx_draw][c_idx_draw]
+                
+                # Color: black for pathable (0), light grey for obstacles (1)
+                clr = 'black' if cell_val == 0 else 'lightgrey'
+                alpha = 0.7 if clr == 'black' else 0.3
+                
+                # Draw cell as rectangle centered on grid point
+                rect = plt.Rectangle(
+                    (wcx - GRID_CELL_SIZE/2, wcz - GRID_CELL_SIZE/2),
+                    GRID_CELL_SIZE, GRID_CELL_SIZE,
+                    facecolor=clr, alpha=alpha, edgecolor='gray', linewidth=0.5
+                )
                 ax.add_patch(rect)
-                if r_idx % 3 == 0 and c_idx % 3 == 0: ax.text(wx_cell, wz_cell, f'({r_idx},{c_idx})', ha='center', va='center', fontsize=7, color='blue', alpha=0.5)
-        margin = GRID_CELL_SIZE * 1.5
-        ax.set_xlim(GRID_ORIGIN_X - margin, GRID_ORIGIN_X + GRID_COLS * GRID_CELL_SIZE + margin)
-        ax.set_ylim(GRID_ORIGIN_Z - margin, GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE + margin)
+                
+                # Add grid coordinate labels for reference points
+                if r_idx_draw % 3 == 0 and c_idx_draw % 3 == 0:
+                    ax.text(wcx, wcz, f'({r_idx_draw},{c_idx_draw})', 
+                           ha='center', va='center', fontsize=7, 
+                           color='blue', alpha=0.6)
+        
+        # Set axis limits with margin
+        mgn = GRID_CELL_SIZE * 1.5
+        ax.set_xlim(GRID_ORIGIN_X - mgn, GRID_ORIGIN_X + GRID_COLS * GRID_CELL_SIZE + mgn)
+        ax.set_ylim(GRID_ORIGIN_Z - mgn, GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE + mgn)
+        
+        # Create legend
         from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor='black', alpha=0.6, label='Pathable'), Patch(facecolor='lightgrey', alpha=0.3, label='Obstacle'),
-                           plt.Line2D([0], [0], color='cyan', lw=2, label='Robot Trail'), plt.Line2D([0], [0], color='magenta', marker='o',ms=5, ls='--', lw=2, label='Dijkstra Path'),
-                           plt.Line2D([0], [0], color='red', marker='o',ms=8, ls='', label='Robot'), plt.Line2D([0], [0], color='green', marker='*',ms=12, ls='', label='Goal')]
-        ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1)); plt.tight_layout(rect=[0, 0, 0.85, 1]); plt.show(block=False); plt.pause(0.01)
+        lgd = [
+            Patch(fc='black', alpha=0.7, label='Pathable (Black Line)'),
+            Patch(fc='lightgrey', alpha=0.3, label='Obstacle (White Space)'),
+            plt.Line2D([0], [0], color='cyan', lw=2, label='Robot Trail'),
+            plt.Line2D([0], [0], color='magenta', marker='o', ms=5, ls='--', lw=2, label='Dijkstra Path'),
+            plt.Line2D([0], [0], color='red', marker='o', ms=8, ls='', label='Robot'),
+            plt.Line2D([0], [0], color='green', marker='*', ms=12, ls='', label='Goal')
+        ]
+        ax.legend(handles=lgd, loc='upper left', bbox_to_anchor=(1.02, 1))
+        plt.tight_layout(rect=[0, 0, 0.85, 1])
+        plt.show(block=False)
+        plt.pause(0.01)
 
-    for artist_list in [ax.lines[ (GRID_ROWS + 1) + (GRID_COLS + 1):], ax.patches[GRID_ROWS * GRID_COLS:], ax.texts[ (GRID_ROWS//3 * GRID_COLS//3 * (GRID_COLS//3 >0)):]]:
-        while artist_list: artist_list.pop(0).remove()
-
-    robot_trail_world.append((robot_world_pose['x'], robot_world_pose['z']))
-    if len(robot_trail_world) > 150: robot_trail_world.pop(0)
-    if len(robot_trail_world) > 1: trail_x, trail_z = zip(*robot_trail_world); ax.plot(trail_x, trail_z, 'cyan', lw=2, alpha=0.7)
-
-    if path_from_esp32 and len(path_from_esp32) > 1:
-        planned_path_grid = path_from_esp32
-        path_world_coords = [grid_to_world_center(r, c) for r, c in planned_path_grid]
-        path_x, path_z = zip(*path_world_coords)
-        ax.plot(path_x, path_z, 'mo--', lw=2, ms=5, alpha=0.8)
-        if path_x: ax.plot(path_x[0], path_z[0], 'm^', ms=8); ax.plot(path_x[-1], path_z[-1], 'm*', ms=8)
-
-    ax.plot(robot_world_pose['x'], robot_world_pose['z'], 'ro', ms=10, mec='darkred', mew=1)
-    arrow_len = GRID_CELL_SIZE * 0.8; dx = arrow_len * math.cos(robot_world_pose['theta']); dz = arrow_len * math.sin(robot_world_pose['theta'])
-    from matplotlib.patches import FancyArrowPatch
-    arrow = FancyArrowPatch((robot_world_pose['x'], robot_world_pose['z']), (robot_world_pose['x'] + dx, robot_world_pose['z'] + dz), arrowstyle='->', mutation_scale=15, color='darkred', lw=2)
-    ax.add_patch(arrow)
-    if current_robot_grid_pos:
-        wx_curr, wz_curr = grid_to_world_center(current_robot_grid_pos[0], current_robot_grid_pos[1])
-        rect_curr = plt.Rectangle((wx_curr - GRID_CELL_SIZE/2, wz_curr - GRID_CELL_SIZE/2), GRID_CELL_SIZE, GRID_CELL_SIZE, edgecolor='yellow', facecolor='yellow', alpha=0.3, lw=2)
-        ax.add_patch(rect_curr)
-    goal_wx, goal_wz = grid_to_world_center(GOAL_ROW, GOAL_COL); ax.plot(goal_wx, goal_wz, 'g*', ms=15, mec='darkgreen', mew=1.5)
-    info_text_content = (f"Grid: {current_robot_grid_pos} -> {GOAL_ROW, GOAL_COL}\n"
-                         f"World: X={robot_world_pose['x']:.2f}, Z={robot_world_pose['z']:.2f}, θ={math.degrees(robot_world_pose['theta']):.1f}°\n"
-                         f"Path Nodes: {len(planned_path_grid) if planned_path_grid else 'N/A'}\n"
-                         f"Webots Turn Phase: {webots_internal_turn_phase}")
-    if hasattr(ax, '_info_text_handle') and ax._info_text_handle in ax.texts: ax._info_text_handle.remove()
-    ax._info_text_handle = ax.text(0.02, 0.98, info_text_content, transform=ax.transAxes, va='top', fontsize=8, bbox=dict(boxstyle='round,pad=0.3', fc='lightblue', alpha=0.7))
-    plt.draw(); plt.pause(0.001)
-
-robot = Robot(); timestep = int(robot.getBasicTimeStep())
-robot_world_pose = {'x': 0.0, 'z': 0.0, 'theta': 0.0}; prev_left_enc = 0.0; prev_right_enc = 0.0; first_run_odometry = True
-left_motor = robot.getDevice('left wheel motor'); right_motor = robot.getDevice('right wheel motor')
-left_enc = robot.getDevice('left wheel sensor'); right_enc = robot.getDevice('right wheel sensor')
-for motor in [left_motor, right_motor]: motor.setPosition(float('inf')); motor.setVelocity(0.0)
-for encoder in [left_enc, right_enc]: encoder.enable(timestep)
-ground_sensors_wb = [];传感器名称列表 = ['gs0', 'gs1', 'gs2']
-for name in 传感器名称列表: sensor = robot.getDevice(name); sensor.enable(timestep); ground_sensors_wb.append(sensor)
-
-client_sock = None; connection_ok = False; esp32_current_command = 'stop'
-
-def connect_to_esp32():
-    global client_sock, connection_ok
+    # Clear dynamic elements
+    num_static_lines = (GRID_ROWS + 1) + (GRID_COLS + 1)
+    num_static_patches = GRID_ROWS * GRID_COLS
+    num_static_texts = sum(1 for r_idx in range(GRID_ROWS) for c_idx in range(GRID_COLS) 
+                          if r_idx % 3 == 0 and c_idx % 3 == 0)
+    
+    for alist in [ax.lines[num_static_lines:], ax.patches[num_static_patches:], ax.texts[num_static_texts:]]:
+        while alist:
+            alist.pop(0).remove()
+    
+    # Get robot display position (centered on line when following line)
+    # Use the sensor data that's already calculated in main loop
+    # Note: ldf is passed implicitly through the call from main loop
+    
+    # For now, get sensor data directly in visualization
+    # This avoids the global variable issue
     try:
-        if client_sock: client_sock.close()
-        client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM); client_sock.settimeout(2.0)
-        client_sock.connect((ESP32_IP_ADDRESS, ESP32_PORT)); client_sock.settimeout(0.05)
-        connection_ok = True; print(f"✅ Connected to ESP32 at {ESP32_IP_ADDRESS}:{ESP32_PORT}"); return True
+        raw_sv = [s.getValue() for s in gs_wb]
+        ldf_local = [1 if v < LINE_THRESHOLD else 0 for v in raw_sv]
+    except:
+        ldf_local = [0, 0, 0]  # Default to no line detected
+    
+    display_x, display_z = get_line_centered_position(rwp, crgp, ldf_local)
+    
+    # Update robot trail with display position
+    robot_trail_world.append((display_x, display_z))
+    if len(robot_trail_world) > 200:
+        robot_trail_world.pop(0)
+    
+    if len(robot_trail_world) > 1:
+        tx, tz = zip(*robot_trail_world)
+        ax.plot(tx, tz, 'cyan', lw=2, alpha=0.7)
+    
+    # Draw planned path
+    if path_esp and len(path_esp) > 1:
+        planned_path_grid = path_esp
+        pwc = [grid_to_world_center(r, c) for r, c in planned_path_grid]
+        if pwc:
+            px, pz = zip(*pwc)
+            ax.plot(px, pz, 'mo--', lw=2, ms=5, alpha=0.8)
+            if px:
+                ax.plot(px[0], pz[0], 'm^', ms=8)  # Start
+                ax.plot(px[-1], pz[-1], 'm*', ms=8)  # End
+    
+    # Draw current robot position (using display position when on line)
+    ax.plot(display_x, display_z, 'ro', ms=10, mec='darkred', mew=1)
+    
+    # Draw robot orientation arrow from display position
+    arr_len = GRID_CELL_SIZE * 0.8
+    dx = arr_len * math.cos(rwp['theta'])
+    dz = arr_len * math.sin(rwp['theta'])
+    arrow = plt.matplotlib.patches.FancyArrowPatch(
+        (display_x, display_z), (display_x + dx, display_z + dz),
+        arrowstyle='->', mutation_scale=15, color='darkred', lw=2
+    )
+    ax.add_patch(arrow)
+    
+    # Highlight current grid cell
+    if crgp:
+        wcx_curr, wcz_curr = grid_to_world_center(crgp[0], crgp[1])
+        highlight_rect = plt.Rectangle(
+            (wcx_curr - GRID_CELL_SIZE/2, wcz_curr - GRID_CELL_SIZE/2),
+            GRID_CELL_SIZE, GRID_CELL_SIZE,
+            edgecolor='yellow', facecolor='yellow', alpha=0.3, linewidth=3
+        )
+        ax.add_patch(highlight_rect)
+        
+        # Debug info for current cell
+        if hasattr(ax, '_debug_text_handle_crgp_val') and ax._debug_text_handle_crgp_val in ax.texts:
+            ax._debug_text_handle_crgp_val.remove()
+        
+        cell_value = world_grid[crgp[0]][crgp[1]] if (0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS) else 'OOB'
+        ax._debug_text_handle_crgp_val = ax.text(
+            wcx_curr, wcz_curr + GRID_CELL_SIZE * 0.6,
+            f"Val: {cell_value}", ha='center', va='bottom',
+            fontsize=8, color='purple', weight='bold',
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.8)
+        )
+
+    # Draw goal
+    gwx, gwz = grid_to_world_center(GOAL_ROW, GOAL_COL)
+    ax.plot(gwx, gwz, 'g*', ms=15, mec='darkgreen', mew=1.5)
+    
+    # Info text (show both actual and display positions with more debug info)
+    sensors_on_line = any(ldf_local)
+    current_cell_value = world_grid[crgp[0]][crgp[1]] if (0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS) else 'OOB'
+    centering_active = (display_x != rwp['x'] or display_z != rwp['z'])
+    
+    info = (f"Grid: {crgp} -> ({GOAL_ROW},{GOAL_COL}) | Cell Value: {current_cell_value}\n"
+           f"Actual: X={rwp['x']:.3f}, Z={rwp['z']:.3f}, θ={math.degrees(rwp['theta']):.1f}°\n"
+           f"Display: X={display_x:.3f}, Z={display_z:.3f} | Centering: {centering_active}\n"
+           f"On Line: {sensors_on_line} | Sensors: {ldf_local} | Path: {len(planned_path_grid) if planned_path_grid else 'N/A'}\n"
+           f"Turn Phase: {webots_internal_turn_phase}")
+    
+    if hasattr(ax, '_info_text_handle') and ax._info_text_handle in ax.texts:
+        ax._info_text_handle.remove()
+    
+    ax._info_text_handle = ax.text(
+        0.02, 0.98, info, transform=ax.transAxes, va='top', fontsize=9,
+        bbox=dict(boxstyle='round,pad=0.4', facecolor='lightblue', alpha=0.8)
+    )
+    
+    plt.draw()
+    plt.pause(0.001)
+
+# Initialize robot
+robot = Robot()
+timestep = int(robot.getBasicTimeStep())
+
+# Robot state
+rwp = {'x': 0., 'z': 0., 'theta': 0.}
+ple = 0.; pre = 0.; frod = True
+
+# Motors and encoders
+lm = robot.getDevice('left wheel motor')
+rm = robot.getDevice('right wheel motor')
+le = robot.getDevice('left wheel sensor')
+re = robot.getDevice('right wheel sensor')
+
+for m in [lm, rm]:
+    m.setPosition(float('inf'))
+    m.setVelocity(0.0)
+
+for e in [le, re]:
+    e.enable(timestep)
+
+# Ground sensors
+gs_wb = []
+sens_names = ['gs0', 'gs1', 'gs2']
+for name in sens_names:
+    s = robot.getDevice(name)
+    s.enable(timestep)
+    gs_wb.append(s)
+
+# Network variables
+client_socket = None
+is_connected_to_esp32 = False
+esp32_command_state = 'stop'
+
+def connect_to_esp32_server():
+    global client_socket, is_connected_to_esp32
+    print(f"Attempting ESP connection to {ESP32_IP_ADDRESS}...")
+    try:
+        if client_socket:
+            client_socket.close()
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.settimeout(2.0)
+        client_socket.connect((ESP32_IP_ADDRESS, ESP32_PORT))
+        client_socket.settimeout(0.05)
+        is_connected_to_esp32 = True
+        print(f"✅ ESP Connected!")
+        return True
     except Exception as e:
-        print(f"🔌 ESP32 Connection failed: {e}"); connection_ok = False
-        if client_sock: client_sock.close(); client_sock = None; return False
+        print(f"🔌 ESP Fail: {e}")
+        is_connected_to_esp32 = False
+        client_socket = None
+        return False
 
-INITIAL_GRID_ROW, INITIAL_GRID_COL = 2, 16
-robot_world_pose['x'], robot_world_pose['z'] = grid_to_world_center(INITIAL_GRID_ROW, INITIAL_GRID_COL)
-robot_world_pose['theta'] = math.pi / 2.0
-current_robot_grid_pos = world_to_grid(robot_world_pose['x'], robot_world_pose['z'])
-print(f"🚀 Robot init @ grid {current_robot_grid_pos}, World X={robot_world_pose['x']:.2f}, Z={robot_world_pose['z']:.2f}, Goal {GOAL_ROW,GOAL_COL}")
+# CRITICAL: Set initial position to match your actual robot starting position in Webots
+# You may need to adjust these values based on your world setup
+INITIAL_GRID_ROW, INITIAL_GRID_COL = 0, 16
 
-loop_counter = 0; last_connection_attempt_time = 0; last_data_send_time = 0
+# Calculate initial world position from grid coordinates
+rwp['x'], rwp['z'] = grid_to_world_center(INITIAL_GRID_ROW, INITIAL_GRID_COL)
+rwp['theta'] = math.pi / 2.0  # Facing down initially
 
+# Verify the conversion works both ways
+crgp = world_to_grid(rwp['x'], rwp['z'])
+print(f"🚀 Robot init @ grid {crgp}, World (X={rwp['x']:.3f}, Z={rwp['z']:.3f}). Goal: ({GOAL_ROW},{GOAL_COL})")
+print(f"🔍 Grid-to-World-to-Grid test: {INITIAL_GRID_ROW, INITIAL_GRID_COL} -> {rwp['x']:.3f}, {rwp['z']:.3f} -> {crgp}")
+
+# Main loop variables
+loop_iteration_count = 0
+last_esp_connection_attempt_time = 0
+last_data_transmission_time = 0
+
+# Main control loop
 while robot.step(timestep) != -1:
-    if loop_counter == 0: connect_to_esp32(); update_visualization(robot_world_pose, current_robot_grid_pos, planned_path_grid)
-    loop_counter += 1; current_time = robot.getTime()
+    if loop_iteration_count == 0:
+        connect_to_esp32_server()
+        update_visualization(rwp, crgp, planned_path_grid)
+    
+    loop_iteration_count += 1
+    current_simulation_time = robot.getTime()
 
-    if not first_run_odometry:
-        left_enc_val, right_enc_val = left_enc.getValue(), right_enc.getValue()
-        delta_dist = ((left_enc_val - prev_left_enc) * WHEEL_RADIUS + (right_enc_val - prev_right_enc) * WHEEL_RADIUS) / 2.0
-        delta_theta = ((right_enc_val - prev_right_enc) * WHEEL_RADIUS - (left_enc_val - prev_left_enc) * WHEEL_RADIUS) / AXLE_LENGTH
-        robot_world_pose['x'] += delta_dist * math.cos(robot_world_pose['theta'] + delta_theta / 2.0)
-        robot_world_pose['z'] += delta_dist * math.sin(robot_world_pose['theta'] + delta_theta / 2.0)
-        robot_world_pose['theta'] = math.atan2(math.sin(robot_world_pose['theta'] + delta_theta), math.cos(robot_world_pose['theta'] + delta_theta))
-        prev_left_enc, prev_right_enc = left_enc_val, right_enc_val
-    else: prev_left_enc, prev_right_enc = left_enc.getValue(), right_enc.getValue(); first_run_odometry = False
+    # Update robot position from odometry
+    if not frod:
+        lev, rev = le.getValue(), re.getValue()
+        dd = ((lev - ple) * WHEEL_RADIUS + (rev - pre) * WHEEL_RADIUS) / 2.0
+        dt = ((rev - pre) * WHEEL_RADIUS - (lev - ple) * WHEEL_RADIUS) / AXLE_LENGTH
+        rwp['x'] += dd * math.cos(rwp['theta'] + dt / 2.0)
+        rwp['z'] += dd * math.sin(rwp['theta'] + dt / 2.0)
+        rwp['theta'] = math.atan2(math.sin(rwp['theta'] + dt), math.cos(rwp['theta'] + dt))
+        ple, pre = lev, rev
+    else:
+        ple, pre = le.getValue(), re.getValue()
+        frod = False
+    
+    # Update current grid position
+    new_crgp = world_to_grid(rwp['x'], rwp['z'])
+    if new_crgp != crgp:
+        cell_value = world_grid[new_crgp[0]][new_crgp[1]] if (0 <= new_crgp[0] < GRID_ROWS and 0 <= new_crgp[1] < GRID_COLS) else 'OUT OF BOUNDS'
+        print(f"DEBUG MAIN: Robot moved to grid {new_crgp}. world_grid value = {cell_value}")
+    crgp = new_crgp
+        
+    # Read ground sensors
+    raw_sv = [s.getValue() for s in gs_wb]
+    ldf = [1 if v < LINE_THRESHOLD else 0 for v in raw_sv]
+    ols, ocs, ors = ldf
 
-    current_robot_grid_pos = world_to_grid(robot_world_pose['x'], robot_world_pose['z'])
-    raw_sensor_values = [gs.getValue() for gs in ground_sensors_wb]
-    line_detected_flags = [1 if val < LINE_THRESHOLD else 0 for val in raw_sensor_values]
-    on_left_sensor, on_center_sensor, on_right_sensor = line_detected_flags
-
-    if not connection_ok:
-        if current_time - last_connection_attempt_time > 3.0: connect_to_esp32(); last_connection_attempt_time = current_time
-        left_motor.setVelocity(0.0); right_motor.setVelocity(0.0)
-        if loop_counter % 10 == 0: update_visualization(robot_world_pose, current_robot_grid_pos, planned_path_grid)
+    # Handle ESP32 connection
+    if not is_connected_to_esp32:
+        if current_simulation_time - last_esp_connection_attempt_time > 3.0:
+            connect_to_esp32_server()
+            last_esp_connection_attempt_time = current_simulation_time
+        lm.setVelocity(0.0)
+        rm.setVelocity(0.0)
+        if loop_iteration_count % 10 == 0:
+            update_visualization(rwp, crgp, planned_path_grid)
         continue
 
-    if current_time - last_data_send_time > 0.1:
+    # Send data to ESP32
+    if current_simulation_time - last_data_transmission_time > 0.1:
         try:
-            data_to_esp = {'type': 'webots_status', 'robot_grid_pos': list(current_robot_grid_pos), 'goal_grid_pos': [GOAL_ROW, GOAL_COL],
-                           'world_pose': {'x': round(robot_world_pose['x'],3), 'z': round(robot_world_pose['z'],3), 'theta_rad': round(robot_world_pose['theta'],3)},
-                           'sensors_binary': line_detected_flags }
-            client_sock.sendall((json.dumps(data_to_esp) + '\n').encode('utf-8')); last_data_send_time = current_time
-        except Exception as e: print(f"❌ ESP Send: {e}"); connection_ok = False; client_sock.close(); client_sock=None; continue
-    try:
-        response_bytes = client_sock.recv(1024)
-        if response_bytes:
-            for msg_part in response_bytes.decode('utf-8').strip().split('\n'):
-                if not msg_part.strip(): continue
+            data = {
+                'type': 'webots_status',
+                'robot_grid_pos': list(crgp),
+                'goal_grid_pos': [GOAL_ROW, GOAL_COL],
+                'world_pose': {
+                    'x': round(rwp['x'], 3),
+                    'z': round(rwp['z'], 3),
+                    'theta_rad': round(rwp['theta'], 3)
+                },
+                'sensors_binary': ldf
+            }
+            client_socket.sendall((json.dumps(data) + '\n').encode('utf-8'))
+            last_data_transmission_time = current_simulation_time
+        except Exception as e:
+            print(f"❌ ESP Send Error: {e}")
+            is_connected_to_esp32 = False
+            if client_socket:
                 try:
-                    data_from_esp = json.loads(msg_part)
-                    if data_from_esp.get('type') == 'esp32_command':
-                        new_esp_cmd = data_from_esp.get('action', 'stop')
-                        if new_esp_cmd != esp32_current_command and esp32_current_command in ['turn_left', 'turn_right'] and new_esp_cmd not in ['turn_left', 'turn_right']:
-                            print(f"Webots: ESP32 cmd '{new_esp_cmd}' overrides active turn. Resetting turn state.")
-                            webots_internal_turn_phase = 'NONE' # ESP took over, stop local turning
+                    client_socket.close()
+                except Exception as e_close:
+                    print(f"Err closing socket (send): {e_close}")
+                client_socket = None
+            continue
+    
+    # Receive commands from ESP32
+    try:
+        resp_b = client_socket.recv(1024)
+        if resp_b:
+            for msg_p in resp_b.decode('utf-8').strip().split('\n'):
+                if not msg_p.strip():
+                    continue
+                try:
+                    data_esp = json.loads(msg_p)
+                    if data_esp.get('type') == 'esp32_command':
+                        new_cmd = data_esp.get('action', 'stop')
+                        if (new_cmd != esp32_command_state and 
+                            esp32_command_state in ['turn_left', 'turn_right'] and 
+                            new_cmd not in ['turn_left', 'turn_right']):
+                            webots_internal_turn_phase = 'NONE'
                             webots_turn_command_active = None
-                        esp32_current_command = new_esp_cmd
-                        planned_path_grid = data_from_esp.get('path', planned_path_grid) # Keep old path if new one not sent
-                except json.JSONDecodeError as e: print(f"⚠️ JSON ESP: '{msg_part}', {e}")
-                except Exception as e: print(f"⚠️ Proc ESP: {e}")
-    except socket.timeout: pass
-    except Exception as e: print(f"❌ ESP Recv: {e}"); connection_ok = False; client_sock.close(); client_sock=None; continue
+                        esp32_command_state = new_cmd
+                        planned_path_grid = data_esp.get('path', planned_path_grid)
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ JSON ESP: '{msg_p}', {e}")
+                except Exception as e:
+                    print(f"⚠️ Proc ESP: {e}")
+    except socket.timeout:
+        pass
+    except Exception as e:
+        print(f"❌ ESP Receive Error: {e}")
+        is_connected_to_esp32 = False
+        if client_socket:
+            try:
+                client_socket.close()
+            except Exception as e_close:
+                print(f"Err closing socket (recv): {e_close}")
+            client_socket = None
+        continue
 
-    left_speed, right_speed = 0.0, 0.0
+    # Motor control logic
+    ls, rs = 0.0, 0.0
 
-    # --- Handle ESP32 Commands with Enhanced Turning ---
-    if esp32_current_command not in ['turn_left', 'turn_right'] and webots_internal_turn_phase != 'NONE':
-        # If ESP command is not a turn, but Webots was in a turn phase, reset Webots turn state.
-        # This ensures 'forward' or 'stop' from ESP takes immediate precedence over local turning.
-        # print(f"Webots: ESP cmd '{esp32_current_command}' received. Clearing internal turn phase '{webots_internal_turn_phase}'.")
+    if esp32_command_state not in ['turn_left', 'turn_right'] and webots_internal_turn_phase != 'NONE':
         webots_internal_turn_phase = 'NONE'
         webots_turn_command_active = None
 
-    if esp32_current_command == 'stop':
-        left_speed, right_speed = 0.0, 0.0
-        webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None # Ensure reset
-    elif esp32_current_command == 'forward':
-        webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None # Ensure reset
-        if on_center_sensor and not on_left_sensor and not on_right_sensor: left_speed, right_speed = FORWARD_SPEED, FORWARD_SPEED
-        elif on_left_sensor and not on_right_sensor: left_speed, right_speed = FORWARD_SPEED * 0.3, FORWARD_SPEED * 0.8
-        elif on_right_sensor and not on_left_sensor: left_speed, right_speed = FORWARD_SPEED * 0.8, FORWARD_SPEED * 0.3
-        elif on_left_sensor and on_center_sensor and not on_right_sensor: left_speed, right_speed = FORWARD_SPEED * 0.5, FORWARD_SPEED * 0.9
-        elif on_right_sensor and on_center_sensor and not on_left_sensor: left_speed, right_speed = FORWARD_SPEED * 0.9, FORWARD_SPEED * 0.5
-        elif not any(line_detected_flags): left_speed, right_speed = FORWARD_SPEED * 0.2, FORWARD_SPEED * 0.2 # Lost line, crawl
-        else: left_speed, right_speed = FORWARD_SPEED * 0.4, FORWARD_SPEED * 0.4 # All sensors, intersection or broad line
-    
-    elif esp32_current_command in ['turn_left', 'turn_right']:
-        if webots_turn_command_active != esp32_current_command or webots_internal_turn_phase == 'NONE': # New/Restart turn
-            webots_turn_command_active = esp32_current_command
+    if esp32_command_state == 'stop':
+        ls, rs = 0.0, 0.0
+        webots_internal_turn_phase = 'NONE'
+        webots_turn_command_active = None
+        
+    elif esp32_command_state == 'forward':
+        webots_internal_turn_phase = 'NONE'
+        webots_turn_command_active = None
+        base_speed = FORWARD_SPEED
+        
+        # Line following logic with aggressive centering
+        if not ols and ocs and not ors:     # Center sensor only
+            ls, rs = base_speed, base_speed
+        elif ols and ocs and not ors:       # Left + center
+            ls, rs = base_speed - MODERATE_CORRECTION_DIFFERENTIAL, base_speed
+        elif not ols and ocs and ors:       # Center + right
+            ls, rs = base_speed, base_speed - MODERATE_CORRECTION_DIFFERENTIAL
+        elif ols and not ocs and not ors:   # Left only
+            ls, rs = base_speed - AGGRESSIVE_CORRECTION_DIFFERENTIAL, base_speed
+        elif not ols and not ocs and ors:   # Right only
+            ls, rs = base_speed, base_speed - AGGRESSIVE_CORRECTION_DIFFERENTIAL
+        elif ols and ocs and ors:           # All sensors
+            ls, rs = base_speed * 0.7, base_speed * 0.7
+        elif not ols and not ocs and not ors: # No sensors
+            ls, rs = base_speed * 0.2, base_speed * 0.2
+        else:                               # Other combinations
+            ls, rs = base_speed * 0.3, base_speed * 0.3
+
+    elif esp32_command_state in ['turn_left', 'turn_right']:
+        # Enhanced turn logic
+        if (webots_turn_command_active != esp32_command_state or 
+            webots_internal_turn_phase == 'NONE'):
+            webots_turn_command_active = esp32_command_state
             webots_internal_turn_phase = 'INITIATE_SPIN'
-            turn_phase_start_time = current_time
-            print(f"Webots: Turn '{webots_turn_command_active}' state -> INITIATE_SPIN")
+            turn_phase_start_time = current_simulation_time
+            print(f"Webots: Turn '{esp32_command_state}' -> INITIATE_SPIN")
 
         if webots_internal_turn_phase == 'INITIATE_SPIN':
-            spin_speed_inner = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.6
-            spin_speed_outer = FORWARD_SPEED * TURN_SPEED_FACTOR * 1.0
-            left_speed, right_speed = (spin_speed_inner, spin_speed_outer) if webots_turn_command_active == 'turn_left' else (spin_speed_outer, spin_speed_inner)
-            if current_time - turn_phase_start_time > MIN_INITIAL_SPIN_DURATION:
-                webots_internal_turn_phase = 'SEARCHING_LINE'; turn_phase_start_time = current_time
-                print(f"Webots: Turn '{webots_turn_command_active}' state -> SEARCHING_LINE")
-
-        elif webots_internal_turn_phase == 'SEARCHING_LINE':
-            search_speed_inner = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.3 # Slower, wider turn for search
-            search_speed_outer = FORWARD_SPEED * TURN_SPEED_FACTOR * 0.7
-            left_speed, right_speed = (search_speed_inner, search_speed_outer) if webots_turn_command_active == 'turn_left' else (search_speed_outer, search_speed_inner)
+            spin_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.7
+            spin_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 1.0
+            ls, rs = (spin_in, spin_out) if webots_turn_command_active == 'turn_left' else (spin_out, spin_in)
             
-            line_acquired = on_center_sensor or \
-                            (on_left_sensor and on_center_sensor) or \
-                            (on_right_sensor and on_center_sensor) or \
-                            (webots_turn_command_active == 'turn_left' and on_left_sensor and not on_right_sensor) or \
-                            (webots_turn_command_active == 'turn_right' and on_right_sensor and not on_left_sensor)
-
-            if line_acquired:
-                webots_internal_turn_phase = 'ADJUSTING_ON_LINE'; turn_phase_start_time = current_time
-                print(f"Webots: Turn '{webots_turn_command_active}' state -> ADJUSTING_ON_LINE (Sensors: {line_detected_flags})")
-            elif current_time - turn_phase_start_time > MAX_SEARCH_SPIN_DURATION:
-                print(f"Webots: Turn '{webots_turn_command_active}' state -> TIMEOUT SEARCHING. Aborting local turn.")
-                webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None 
-                left_speed, right_speed = 0.0, 0.0 # Stop until ESP32 gives new command
-
+            if current_simulation_time - turn_phase_start_time > MIN_INITIAL_SPIN_DURATION:
+                webots_internal_turn_phase = 'SEARCHING_LINE'
+                turn_phase_start_time = current_simulation_time
+                print(f"Webots: Turn '{webots_turn_command_active}' -> SEARCHING_LINE")
+                
+        elif webots_internal_turn_phase == 'SEARCHING_LINE':
+            srch_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.4
+            srch_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 0.8
+            ls, rs = (srch_in, srch_out) if webots_turn_command_active == 'turn_left' else (srch_out, srch_in)
+            
+            acquired = (ocs or (ols and ocs) or (ors and ocs) or 
+                       (webots_turn_command_active == 'turn_left' and ols and not ors) or 
+                       (webots_turn_command_active == 'turn_right' and ors and not ols))
+            
+            if acquired:
+                webots_internal_turn_phase = 'ADJUSTING_ON_LINE'
+                turn_phase_start_time = current_simulation_time
+                print(f"Webots: Turn '{webots_turn_command_active}' -> ADJUSTING_ON_LINE (Sens: {ldf})")
+            elif current_simulation_time - turn_phase_start_time > MAX_SEARCH_SPIN_DURATION:
+                print(f"Webots: Turn '{webots_turn_command_active}' -> TIMEOUT SEARCH. Abort local.")
+                webots_internal_turn_phase = 'NONE'
+                ls, rs = 0, 0
+                
         elif webots_internal_turn_phase == 'ADJUSTING_ON_LINE':
-            adj_fwd = FORWARD_SPEED * TURN_ADJUST_SPEED_FACTOR
-            adj_turn_dominant = FORWARD_SPEED * TURN_ADJUST_SPEED_FACTOR * 1.5
-            adj_turn_recessive = FORWARD_SPEED * TURN_ADJUST_SPEED_FACTOR * 0.5
+            base = TURN_ADJUST_BASE_SPEED
+            mod_diff_adj = MODERATE_CORRECTION_DIFFERENTIAL * (base / FORWARD_SPEED if FORWARD_SPEED > 1e-3 else 0.1)
+            agg_diff_adj = AGGRESSIVE_CORRECTION_DIFFERENTIAL * (base / FORWARD_SPEED if FORWARD_SPEED > 1e-3 else 0.1)
+            
+            if not ols and ocs and not ors:
+                ls, rs = base * 0.5, base * 0.5
+            elif ols and ocs and not ors:
+                ls, rs = base - mod_diff_adj, base
+            elif not ols and ocs and ors:
+                ls, rs = base, base - mod_diff_adj
+            elif ols and not ocs and not ors:
+                ls, rs = base - agg_diff_adj, base
+            elif not ols and not ocs and ors:
+                ls, rs = base, base - agg_diff_adj
+            elif not any(ldf):
+                print(f"Webots: Turn '{webots_turn_command_active}' Lost line in ADJUST -> SEARCH")
+                webots_internal_turn_phase = 'SEARCHING_LINE'
+                turn_phase_start_time = current_simulation_time
+            else:
+                ls, rs = base * 0.7, base * 0.7
+                
+            if current_simulation_time - turn_phase_start_time > MAX_ADJUST_DURATION:
+                print(f"Webots: Turn '{webots_turn_command_active}' -> TIMEOUT ADJUST. Abort local.")
+                webots_internal_turn_phase = 'NONE'
+                ls, rs = 0, 0
+    else:
+        ls, rs = 0, 0
+        webots_internal_turn_phase = 'NONE'
+        webots_turn_command_active = None
 
-            if on_center_sensor and not on_left_sensor and not on_right_sensor: # Centered
-                left_speed, right_speed = adj_fwd * 0.5, adj_fwd * 0.5 # Crawl/hold
-                print(f"Webots: Turn '{webots_turn_command_active}' state: ADJUSTED & Centered. Waiting for ESP 'forward'.")
-                # Optionally, could set webots_internal_turn_phase to 'NONE' here if confident,
-                # but safer to let ESP32 confirm alignment by sending 'forward'.
-            elif on_left_sensor and not on_right_sensor: left_speed, right_speed = adj_turn_recessive, adj_turn_dominant # Turn left
-            elif on_right_sensor and not on_left_sensor: left_speed, right_speed = adj_turn_dominant, adj_turn_recessive # Turn right
-            elif not any(line_detected_flags): # Lost line during adjustment
-                print(f"Webots: Turn '{webots_turn_command_active}' state: Lost line in ADJUST. -> SEARCHING_LINE")
-                webots_internal_turn_phase = 'SEARCHING_LINE'; turn_phase_start_time = current_time
-            else: left_speed, right_speed = adj_fwd * 0.3, adj_fwd * 0.3 # Other cases, slow down
+    # Apply motor velocities
+    lm.setVelocity(ls)
+    rm.setVelocity(rs)
+    
+    # Update visualization periodically (sensor data already available globally)
+    if loop_iteration_count % 3 == 0:
+        update_visualization(rwp, crgp, planned_path_grid)
+    
+    # Status logging
+    if loop_iteration_count % 25 == 0:
+        cok_s = "🟢 ESP OK" if is_connected_to_esp32 else "🔴 ESP D/C"
+        path_s = len(planned_path_grid) if planned_path_grid else "N/A"
+        print(f"Sim: {current_simulation_time:.1f}s | {cok_s} | ESP: {esp32_command_state.upper()} | "
+              f"Grid: {crgp} | Path: {path_s} | Sens: {ldf} | TurnPh: {webots_internal_turn_phase}")
 
-            if current_time - turn_phase_start_time > MAX_ADJUST_DURATION:
-                print(f"Webots: Turn '{webots_turn_command_active}' state -> TIMEOUT ADJUSTING. Aborting local turn.")
-                webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None
-                left_speed, right_speed = 0.0, 0.0
-    else: # Default/unknown ESP32 command
-        left_speed, right_speed = 0.0, 0.0 # Stop if command is unknown
-        webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None
+# Cleanup
+if client_socket:
+    try:
+        client_socket.close()
+    except:
+        pass
 
+if fig:
+    print("🎨 Sim ended.")
+    plt.ioff()
+    plt.show(block=True)
 
-    left_motor.setVelocity(left_speed); right_motor.setVelocity(right_speed)
-
-    if loop_counter % 3 == 0: update_visualization(robot_world_pose, current_robot_grid_pos, planned_path_grid)
-    if loop_counter % 25 == 0:
-        status_conn = "🟢 ESP32 CONNECTED" if connection_ok else "🔴 ESP32 DISCONNECTED"
-        path_len_info = len(planned_path_grid) if planned_path_grid else "N/A"
-        print(f"Sim: {current_time:.1f}s | {status_conn} | ESP: {esp32_current_command.upper()} | "
-              f"Grid: {current_robot_grid_pos} | Path: {path_len_info} | Sens: {line_detected_flags} | TurnPhase: {webots_internal_turn_phase}")
-
-if client_sock:
-    try: client_sock.close()
-    except: pass
-if fig: print("🎨 Sim ended. Close plot."); plt.ioff(); plt.show(block=True)
 print("✅ Webots Controller Finished.")
