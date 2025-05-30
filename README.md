@@ -10,7 +10,11 @@
 
 *Advanced robotic navigation combining real hardware control with virtual simulation environments*
 
+<<<<<<< HEAD
 ![Demo Video](https://img.shields.io/badge/Demo-Available-success?style=for-the-badge&logo=youtube)
+=======
+![Demo GIF](https://img.shields.io/badge/Demo-Coming%20Soon-blue?style=for-the-badge&logo=youtube)
+>>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge&logo=checkmarx)
 ![Performance](https://img.shields.io/badge/Performance-Optimized-orange?style=for-the-badge&logo=speedtest)
 
@@ -18,6 +22,7 @@
 
 ---
 
+<<<<<<< HEAD
 > **⚠️ ** 
 > - ❌ Don't submit this as your own work please
 </div>
@@ -29,6 +34,18 @@
 This project demonstrates a sophisticated **Hardware-in-the-Loop (HIL)** simulation system where an **ESP32 microcontroller** (running MicroPython) intelligently controls a virtual **Webots robot** through Wi-Fi communication. The system features advanced **Dijkstra path planning**, real-time **sensor-based navigation**, and dynamic **grid mapping** with visual feedback.
 
 > **🎥 Want to see it in action?** Check out our [**Live Demo Video**](#-live-demo) showing the complete system working from hardware setup to goal achievement!
+=======
+> **⚠️ **
+> - ❌ Don't submit this as your own work please 
+
+</div>
+
+---
+
+## 🌟 Overview
+
+This project demonstrates a sophisticated **Hardware-in-the-Loop (HIL)** simulation system where an **ESP32 microcontroller** (running MicroPython) intelligently controls a virtual **Webots robot** through Wi-Fi communication. The system features advanced **Dijkstra path planning**, real-time **sensor-based navigation**, and dynamic **grid mapping** with visual feedback.
+>>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
 
 ### 🎯 Key Highlights
 
@@ -239,6 +256,7 @@ WIFI_PASSWORD = 'Your_Password'
 
 <div align="center">
 
+<<<<<<< HEAD
 ### 🎥 System Demonstration Video
 
 **See the HIL Robot Navigation System in Action!**
@@ -256,6 +274,8 @@ https://github.com/user-attachments/assets/demo.mp4
 
 ---
 
+=======
+>>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
 ### 🚀 Real-Time System Performance
 
 ```mermaid
@@ -284,6 +304,7 @@ flowchart LR
 | **Sensor Accuracy** | `98.7%` | 🟢 High |
 | **Goal Success Rate** | `100%` | 🟢 Perfect |
 
+<<<<<<< HEAD
 ### 🎬 Alternative Video Access
 
 If the embedded video doesn't load properly, you can also:
@@ -292,6 +313,8 @@ If the embedded video doesn't load properly, you can also:
 2. **Local viewing**: Clone the repository and open `demo.mp4` with any video player
 3. **Stream online**: Upload to your preferred video platform for sharing
 
+=======
+>>>>>>> c8b83242c6dc3dc5deba32f3243c6aa068c2fb50
 </div>
 
 ---
