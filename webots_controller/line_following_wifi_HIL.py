@@ -40,9 +40,6 @@ GOAL_COL = 0
 
 # --- Control Parameters ---
 FORWARD_SPEED = 2.8
-# SENSOR THRESHOLD: Values ABOVE this threshold indicate black line (higher reflectance)
-# Values BELOW this threshold indicate white surface (lower reflectance)
-# Adjust this value if sensor readings are incorrect
 LINE_THRESHOLD = 600
 
 # --- Enhanced Turn Parameters ---
@@ -450,8 +447,6 @@ while robot.step(timestep) != -1:
         grid_says = "black line" if cell_value == 0 else "white space" if cell_value == 1 else "out of bounds"
         
         print(f"🤖 Robot moved to grid {new_crgp}. {sensor_status} (Grid map says: {grid_says})")
-        print(f"   📊 Raw sensor values: {[f'{v:.0f}' for v in raw_sv_debug]} (Threshold: {LINE_THRESHOLD})")
-        print(f"   📊 Binary sensors: {ldf_debug} (1=line detected, 0=no line)")
     crgp = new_crgp
         
     # Read ground sensors
