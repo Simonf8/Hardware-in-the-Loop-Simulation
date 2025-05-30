@@ -249,12 +249,17 @@ WIFI_PASSWORD = 'Your_Password'
 
 **See the HIL Robot Navigation System in Action!**
 
-![Demo Video Preview](https://img.shields.io/badge/🎥_Click_to_Watch-Demo_Video-blue?style=for-the-badge)
+<video width="720" height="480" controls>
+  <source src="demo_compressed.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+  <p>
+    <a href="demo_compressed.mp4">📥 Download the demo video (2.1MB)</a>
+  </p>
+</video>
 
-**📱 Click to view the demo video:**
-- **[🎬 Watch demo.mp4](./demo.mp4)** ← Click here to play the video!
-
-> **Note**: GitHub will open the video in its built-in player. If it doesn't play immediately, try downloading it.
+**🎬 Multiple Viewing Options:**
+- **[📺 Watch demo_compressed.mp4](./demo_compressed.mp4)** ← Optimized for GitHub (2.1MB)
+- **[🎥 Full Quality Version](./demo.mp4)** ← Original high-quality video (57MB)
 
 *🎯 See the complete HIL robot navigation system working from start to finish!*
 
