@@ -1,7 +1,7 @@
 """
 Clean Webots HIL Controller with Live Dashboard, ESP32 Dijkstra Path Planning,
-Enhanced Turns, Aggressive Line Centering, Syntax Error Fix, and CORRECTED COORDINATE ALIGNMENT.
-Focus: Ensuring consistency between world_grid array and visualization - FIXED COORDINATE SYSTEM.
+Enhanced Turns, Aggressive Line Centering, and SENSOR-BASED VISUALIZATION.
+Focus: Trust line sensors as ground truth, not world_grid array for visualization.
 """
 from controller import Robot
 import socket
@@ -16,18 +16,18 @@ ESP32_PORT = 8080
 
 # --- Robot Parameters ---
 WHEEL_RADIUS = 0.0205
-AXLE_LENGTH = 0.0610
+AXLE_LENGTH = 0.0810
 
 # --- Grid Configuration (Must match ESP32) ---
 GRID_ROWS = 15
 GRID_COLS = 17
-GRID_CELL_SIZE = 0.058
+GRID_CELL_SIZE = 0.05
 
 # CRITICAL FIX: These origins should match where your actual arena is positioned in Webots
 # You need to measure these values from your Webots world file
 # These should be the world coordinates of the CENTER of grid cell (0,0)
-GRID_ORIGIN_X = -0.5  # ADJUST THIS - measure from your Webots world
-GRID_ORIGIN_Z = -0.5  # ADJUST THIS - measure from your Webots world
+GRID_ORIGIN_X = 10  # ADJUST THIS - measure from your Webots world
+GRID_ORIGIN_Z = 10 # ADJUST THIS - measure from your Webots world
 
 # Alternative: If you know the world coordinates of a specific grid cell, 
 # calculate the origin from there
@@ -40,6 +40,9 @@ GOAL_COL = 0
 
 # --- Control Parameters ---
 FORWARD_SPEED = 2.8
+# SENSOR THRESHOLD: Values ABOVE this threshold indicate black line (higher reflectance)
+# Values BELOW this threshold indicate white surface (lower reflectance)
+# Adjust this value if sensor readings are incorrect
 LINE_THRESHOLD = 600
 
 # --- Enhanced Turn Parameters ---
@@ -54,7 +57,7 @@ AGGRESSIVE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.3
 MODERATE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.2
 
 # --- world_grid definition ---
-# Ensure this is EXACTLY what your arena layout is.
+# NOTE: This is used for path planning, but we'll trust sensors for visualization
 # 0 = Black Line (Pathable), 1 = White Space (Obstacle)
 world_grid = [
     [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0],  # Row 0
@@ -74,9 +77,14 @@ world_grid = [
     [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1]   # Row 14
 ]
 
-plt.ion(); fig = None; ax = None
-robot_trail_world = []; planned_path_grid = []
-webots_internal_turn_phase = 'NONE'; webots_turn_command_active = None; turn_phase_start_time = 0.0
+plt.ion()
+fig = None
+ax = None
+robot_trail_world = []
+planned_path_grid = []
+webots_internal_turn_phase = 'NONE'
+webots_turn_command_active = None
+turn_phase_start_time = 0.0
 
 def world_to_grid(world_x, world_z):
     """Convert world coordinates to grid coordinates with improved precision"""
@@ -108,22 +116,22 @@ def get_robot_position_from_webots(robot):
 
 def get_line_centered_position(rwp, crgp, ldf):
     """
-    VISUALIZATION FIX: Always show robot centered on black line when sensors detect line.
-    IGNORE the world_grid array completely - trust the sensors as ground truth!
+    TRUST SENSORS: Always show robot centered on black line when sensors detect line.
+    Completely ignore the world_grid array - sensors are ground truth!
     """
     sensors_on_line = any(ldf)  # Check if any sensor detects line
     
     if not sensors_on_line:  # If no sensors detect line, use actual position
         return rwp['x'], rwp['z']
     
-    # OVERRIDE: If sensors detect line, ALWAYS center on current grid cell
-    # regardless of what world_grid says, because sensors are ground truth!
+    # SENSORS SAY WE'RE ON LINE: Center on current grid cell
+    # This is what matters, not what world_grid says!
     
     # Get center of current grid cell
     grid_center_x, grid_center_z = grid_to_world_center(crgp[0], crgp[1])
     
-    # Strong centering when sensors detect line - ignore world_grid completely
-    blend_factor = 0.9  # Very strong centering for clean visualization
+    # Very strong centering when sensors detect line
+    blend_factor = 0.95  # Almost complete centering for clean visualization
     
     display_x = rwp['x'] * (1 - blend_factor) + grid_center_x * blend_factor
     display_z = rwp['z'] * (1 - blend_factor) + grid_center_z * blend_factor
@@ -135,7 +143,7 @@ def update_visualization(rwp, crgp, path_esp):
     if fig is None:
         fig, ax = plt.subplots(figsize=(14,10))
         ax.set_aspect('equal')
-        ax.set_title('🤖 HIL Robot Dijkstra Path Planning 🎯 (Webots View)', fontsize=16, fontweight='bold')
+        ax.set_title('🤖 HIL Robot Dijkstra Path Planning 🎯 (Sensor-Based View)', fontsize=16, fontweight='bold')
         ax.set_xlabel('World X (m)')
         ax.set_ylabel('World Z (m)')
         
@@ -151,7 +159,7 @@ def update_visualization(rwp, crgp, path_esp):
                    [GRID_ORIGIN_Z, GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE], 
                    'k-', alpha=0.2, lw=0.5)
         
-        # Draw grid cells
+        # Draw grid cells based on world_grid (for reference)
         for r_idx_draw in range(GRID_ROWS):
             for c_idx_draw in range(GRID_COLS):
                 wcx, wcz = grid_to_world_center(r_idx_draw, c_idx_draw)
@@ -183,8 +191,9 @@ def update_visualization(rwp, crgp, path_esp):
         # Create legend
         from matplotlib.patches import Patch
         lgd = [
-            Patch(fc='black', alpha=0.7, label='Pathable (Black Line)'),
-            Patch(fc='lightgrey', alpha=0.3, label='Obstacle (White Space)'),
+            Patch(fc='black', alpha=0.7, label='Grid Map: Black Line'),
+            Patch(fc='lightgrey', alpha=0.3, label='Grid Map: White Space'),
+            Patch(fc='green', alpha=0.7, label='SENSOR DETECTED LINE'),
             plt.Line2D([0], [0], color='cyan', lw=2, label='Robot Trail'),
             plt.Line2D([0], [0], color='magenta', marker='o', ms=5, ls='--', lw=2, label='Dijkstra Path'),
             plt.Line2D([0], [0], color='red', marker='o', ms=8, ls='', label='Robot'),
@@ -205,18 +214,15 @@ def update_visualization(rwp, crgp, path_esp):
         while alist:
             alist.pop(0).remove()
     
-    # Get robot display position (centered on line when following line)
-    # Use the sensor data that's already calculated in main loop
-    # Note: ldf is passed implicitly through the call from main loop
-    
-    # For now, get sensor data directly in visualization
-    # This avoids the global variable issue
+    # Get sensor data directly in visualization
     try:
         raw_sv = [s.getValue() for s in gs_wb]
         ldf_local = [1 if v < LINE_THRESHOLD else 0 for v in raw_sv]
     except:
         ldf_local = [0, 0, 0]  # Default to no line detected
+        raw_sv = [0, 0, 0]
     
+    # Get robot display position (centered on line when sensors detect line)
     display_x, display_z = get_line_centered_position(rwp, crgp, ldf_local)
     
     # Update robot trail with display position
@@ -252,25 +258,39 @@ def update_visualization(rwp, crgp, path_esp):
     )
     ax.add_patch(arrow)
     
-    # Highlight current grid cell
+    # Highlight current grid cell with sensor-based color
     if crgp:
         wcx_curr, wcz_curr = grid_to_world_center(crgp[0], crgp[1])
+        sensors_on_line = any(ldf_local)
+        
+        # Color based on SENSORS, not world_grid!
+        highlight_color = 'green' if sensors_on_line else 'yellow'
+        highlight_alpha = 0.5 if sensors_on_line else 0.3
+        
         highlight_rect = plt.Rectangle(
             (wcx_curr - GRID_CELL_SIZE/2, wcz_curr - GRID_CELL_SIZE/2),
             GRID_CELL_SIZE, GRID_CELL_SIZE,
-            edgecolor='yellow', facecolor='yellow', alpha=0.3, linewidth=3
+            edgecolor=highlight_color, facecolor=highlight_color, 
+            alpha=highlight_alpha, linewidth=3
         )
         ax.add_patch(highlight_rect)
         
-        # Debug info for current cell
+        # Debug info for current cell - show SENSOR status, not grid value
         if hasattr(ax, '_debug_text_handle_crgp_val') and ax._debug_text_handle_crgp_val in ax.texts:
             ax._debug_text_handle_crgp_val.remove()
         
-        cell_value = world_grid[crgp[0]][crgp[1]] if (0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS) else 'OOB'
+        # Show what sensors say vs what grid says
+        grid_val = world_grid[crgp[0]][crgp[1]] if (0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS) else 'OOB'
+        sensor_status = "BLACK LINE" if sensors_on_line else "NO LINE"
+        grid_says = "black" if grid_val == 0 else "white" if grid_val == 1 else "OOB"
+        
+        status_text = f"SENSORS: {sensor_status}\nGrid says: {grid_says}"
+        status_color = 'green' if sensors_on_line else 'orange'
+        
         ax._debug_text_handle_crgp_val = ax.text(
             wcx_curr, wcz_curr + GRID_CELL_SIZE * 0.6,
-            f"Val: {cell_value}", ha='center', va='bottom',
-            fontsize=8, color='purple', weight='bold',
+            status_text, ha='center', va='bottom',
+            fontsize=8, color=status_color, weight='bold',
             bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.8)
         )
 
@@ -278,23 +298,28 @@ def update_visualization(rwp, crgp, path_esp):
     gwx, gwz = grid_to_world_center(GOAL_ROW, GOAL_COL)
     ax.plot(gwx, gwz, 'g*', ms=15, mec='darkgreen', mew=1.5)
     
-    # Info text (show both actual and display positions with more debug info)
+    # Info text - emphasize sensor readings
     sensors_on_line = any(ldf_local)
-    current_cell_value = world_grid[crgp[0]][crgp[1]] if (0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS) else 'OOB'
     centering_active = (display_x != rwp['x'] or display_z != rwp['z'])
     
-    info = (f"Grid: {crgp} -> ({GOAL_ROW},{GOAL_COL}) | Cell Value: {current_cell_value}\n"
+    # Sensor-based status
+    line_status = "✅ ON BLACK LINE (Sensors)" if sensors_on_line else "❌ NO LINE DETECTED"
+    
+    info = (f"Grid: {crgp} -> ({GOAL_ROW},{GOAL_COL}) | {line_status}\n"
            f"Actual: X={rwp['x']:.3f}, Z={rwp['z']:.3f}, θ={math.degrees(rwp['theta']):.1f}°\n"
            f"Display: X={display_x:.3f}, Z={display_z:.3f} | Centering: {centering_active}\n"
-           f"On Line: {sensors_on_line} | Sensors: {ldf_local} | Path: {len(planned_path_grid) if planned_path_grid else 'N/A'}\n"
+           f"Sensors (L,C,R): {ldf_local} | Raw: {[f'{v:.0f}' for v in raw_sv]}\n"
            f"Turn Phase: {webots_internal_turn_phase}")
     
     if hasattr(ax, '_info_text_handle') and ax._info_text_handle in ax.texts:
         ax._info_text_handle.remove()
     
+    # Color code info box based on sensor status
+    info_bg_color = 'lightgreen' if sensors_on_line else 'lightcoral'
+    
     ax._info_text_handle = ax.text(
         0.02, 0.98, info, transform=ax.transAxes, va='top', fontsize=9,
-        bbox=dict(boxstyle='round,pad=0.4', facecolor='lightblue', alpha=0.8)
+        bbox=dict(boxstyle='round,pad=0.4', facecolor=info_bg_color, alpha=0.8)
     )
     
     plt.draw()
@@ -306,7 +331,9 @@ timestep = int(robot.getBasicTimeStep())
 
 # Robot state
 rwp = {'x': 0., 'z': 0., 'theta': 0.}
-ple = 0.; pre = 0.; frod = True
+ple = 0.
+pre = 0.
+frod = True
 
 # Motors and encoders
 lm = robot.getDevice('left wheel motor')
@@ -366,6 +393,24 @@ crgp = world_to_grid(rwp['x'], rwp['z'])
 print(f"🚀 Robot init @ grid {crgp}, World (X={rwp['x']:.3f}, Z={rwp['z']:.3f}). Goal: ({GOAL_ROW},{GOAL_COL})")
 print(f"🔍 Grid-to-World-to-Grid test: {INITIAL_GRID_ROW, INITIAL_GRID_COL} -> {rwp['x']:.3f}, {rwp['z']:.3f} -> {crgp}")
 
+# COORDINATE ALIGNMENT DEBUG
+print("\n🔍 COORDINATE ALIGNMENT TEST:")
+print("Testing conversion for key grid positions...")
+test_positions = [(0,0), (0,16), (14,0), (7,8), (GRID_ROWS-1, GRID_COLS-1)]
+for row, col in test_positions:
+    wx, wz = grid_to_world_center(row, col)
+    back_row, back_col = world_to_grid(wx, wz)
+    grid_val = world_grid[row][col] if (0 <= row < GRID_ROWS and 0 <= col < GRID_COLS) else 'OOB'
+    grid_type = "BLACK LINE" if grid_val == 0 else "WHITE SPACE" if grid_val == 1 else "OUT OF BOUNDS"
+    print(f"  Grid ({row:2},{col:2}) -> World ({wx:6.3f},{wz:6.3f}) -> Grid ({back_row:2},{back_col:2}) | Grid says: {grid_type}")
+
+print(f"\nGrid Origin: X={GRID_ORIGIN_X}, Z={GRID_ORIGIN_Z}")
+print(f"Grid Size: {GRID_ROWS}x{GRID_COLS}, Cell Size: {GRID_CELL_SIZE}")
+print(f"World Bounds: X=[{GRID_ORIGIN_X:.3f}, {GRID_ORIGIN_X + GRID_COLS * GRID_CELL_SIZE:.3f}], "
+      f"Z=[{GRID_ORIGIN_Z:.3f}, {GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE:.3f}]")
+print("\n⚠️  If robot position doesn't match reality, adjust GRID_ORIGIN_X and GRID_ORIGIN_Z!")
+print("=" * 80 + "\n")
+
 # Main loop variables
 loop_iteration_count = 0
 last_esp_connection_attempt_time = 0
@@ -396,8 +441,17 @@ while robot.step(timestep) != -1:
     # Update current grid position
     new_crgp = world_to_grid(rwp['x'], rwp['z'])
     if new_crgp != crgp:
+        # Read sensors to show actual status
+        raw_sv_debug = [s.getValue() for s in gs_wb]
+        ldf_debug = [1 if v < LINE_THRESHOLD else 0 for v in raw_sv_debug]
+        sensor_status = "SENSORS DETECT LINE" if any(ldf_debug) else "NO LINE DETECTED"
+        
         cell_value = world_grid[new_crgp[0]][new_crgp[1]] if (0 <= new_crgp[0] < GRID_ROWS and 0 <= new_crgp[1] < GRID_COLS) else 'OUT OF BOUNDS'
-        print(f"DEBUG MAIN: Robot moved to grid {new_crgp}. world_grid value = {cell_value}")
+        grid_says = "black line" if cell_value == 0 else "white space" if cell_value == 1 else "out of bounds"
+        
+        print(f"🤖 Robot moved to grid {new_crgp}. {sensor_status} (Grid map says: {grid_says})")
+        print(f"   📊 Raw sensor values: {[f'{v:.0f}' for v in raw_sv_debug]} (Threshold: {LINE_THRESHOLD})")
+        print(f"   📊 Binary sensors: {ldf_debug} (1=line detected, 0=no line)")
     crgp = new_crgp
         
     # Read ground sensors
@@ -585,16 +639,17 @@ while robot.step(timestep) != -1:
     lm.setVelocity(ls)
     rm.setVelocity(rs)
     
-    # Update visualization periodically (sensor data already available globally)
+    # Update visualization periodically
     if loop_iteration_count % 3 == 0:
         update_visualization(rwp, crgp, planned_path_grid)
     
-    # Status logging
+    # Status logging with sensor emphasis
     if loop_iteration_count % 25 == 0:
         cok_s = "🟢 ESP OK" if is_connected_to_esp32 else "🔴 ESP D/C"
         path_s = len(planned_path_grid) if planned_path_grid else "N/A"
+        sensor_status = "✅ ON LINE" if any(ldf) else "❌ NO LINE"
         print(f"Sim: {current_simulation_time:.1f}s | {cok_s} | ESP: {esp32_command_state.upper()} | "
-              f"Grid: {crgp} | Path: {path_s} | Sens: {ldf} | TurnPh: {webots_internal_turn_phase}")
+              f"Grid: {crgp} | Path: {path_s} | {sensor_status} {ldf} | Turn: {webots_internal_turn_phase}")
 
 # Cleanup
 if client_socket:
@@ -604,7 +659,7 @@ if client_socket:
         pass
 
 if fig:
-    print("🎨 Sim ended.")
+    print("🎨 Sim ended. Close plot window to exit.")
     plt.ioff()
     plt.show(block=True)
 
