@@ -1,20 +1,6 @@
 # ESP32 MicroPython Controller with D* Lite Algorithm for Webots HIL
 # Advanced implementation for dynamic replanning
 
-# === DYNAMIC PATH REPLANNING IMPLEMENTATION ===
-# This ESP32 controller implements dynamic path replanning using D* Lite algorithm
-# Key features:
-# 1. Real-time obstacle detection via distance sensor (threshold > 500)
-# 2. Automatic D* Lite replanning when obstacles detected
-# 3. Grid map updates for newly discovered obstacles
-# 4. Continuous path optimization during navigation
-# 
-# Distance sensor integration:
-# - Values > 500: Obstacle detected -> trigger immediate D* replanning
-# - Values < 0.1m: Close obstacle detected -> also trigger replanning
-# - New obstacles are marked in grid and D* Lite updates path accordingly
-# =====================================================
-
 import network
 import socket
 import json
@@ -150,11 +136,8 @@ class DStarLite:
         for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             nr, nc = r + dr, c + dc
             if 0 <= nr < self.rows and 0 <= nc < self.cols:
-                # Cost is 1 for free cells, infinity for obstacles
-                if self.grid[nr][nc] == 0:  # Free cell
-                    cost = 1
-                else:  # Obstacle
-                    cost = float('inf')
+                # Cost is infinity for obstacles, 1 for free cells
+                cost = float('inf') if self.grid[nr][nc] == 1 else 1
                 neighbors.append(((nr, nc), cost))
         
         return neighbors
@@ -282,27 +265,16 @@ class DStarLite:
             is_obstacle: True if position is now obstacle, False if free
         """
         r, c = position
-        if not (0 <= r < self.rows and 0 <= c < self.cols):
-            return
-            
         old_value = self.grid[r][c]
         new_value = 1 if is_obstacle else 0
         
         if old_value != new_value:
             self.grid[r][c] = new_value
-            print(f"D* Lite: Cell ({r}, {c}) changed from {old_value} to {new_value}")
             
-            # Reset costs for affected cells
-            self.g[(r, c)] = float('inf')
-            self.rhs[(r, c)] = float('inf')
-            
-            # Update the node and its neighbors
-            self.update_node((r, c))
-            for neighbor, _ in self.get_neighbors((r, c)):
+            # Update affected nodes
+            self.update_node(position)
+            for neighbor, _ in self.get_neighbors(position):
                 self.update_node(neighbor)
-            
-            # Force recomputation
-            self.compute_shortest_path()
     
     def replan(self, new_start):
         """
@@ -477,77 +449,13 @@ def handle_obstacle_detection(detected_obstacles):
     Args:
         detected_obstacles: List of (row, col) positions with obstacles
     """
-    global dstar_planner, path_needs_replan, grid_map
+    global dstar_planner, path_needs_replan
     
-    if detected_obstacles:
+    if dstar_planner and detected_obstacles:
         for obs_pos in detected_obstacles:
-            row, col = obs_pos[0], obs_pos[1]
-            if 0 <= row < GRID_ROWS and 0 <= col < GRID_COLS:
-                # Update the main grid map
-                if grid_map[row][col] == 0:  # Was a path
-                    grid_map[row][col] = 1  # Now an obstacle
-                    print(f"Obstacle detected at ({row}, {col}), marking as impassable")
-                    
-                    # If D* Lite is initialized, update it
-                    if dstar_planner:
-                        dstar_planner.update_obstacle((row, col), True)
-                    
-                    path_needs_replan = True
-
-def detect_obstacles_from_distance_sensor(distance_value, robot_pos, robot_theta):
-    """
-    Detect obstacles using distance sensor data.
-    
-    Args:
-        distance_value: Distance sensor reading (raw sensor values or meters)
-        robot_pos: Current robot position (row, col)
-        robot_theta: Robot orientation in radians
-        
-    Returns:
-        List of obstacle positions
-    """
-    obstacles = []
-    
-    # Define obstacle detection threshold 
-    # If distance_value > 500, it indicates an obstacle is detected
-    OBSTACLE_THRESHOLD_HIGH = 500  # High values indicate obstacle
-    OBSTACLE_THRESHOLD_LOW = 0.1   # Low values (in meters) also indicate close obstacle
-    SENSOR_RANGE = 0.15            # Maximum reliable sensor range
-    
-    # Check for obstacle detection (either high raw values > 500 or close distance < 0.1m)
-    obstacle_detected = (distance_value > OBSTACLE_THRESHOLD_HIGH) or \
-                       (distance_value < OBSTACLE_THRESHOLD_LOW and distance_value > 0.01)
-    
-    if obstacle_detected:
-        print(f"D* Lite: Obstacle detected - Distance value: {distance_value}")
-        
-        # Calculate obstacle position based on robot position and orientation
-        # Assume sensor faces forward
-        obstacle_distance_cells = 1  # Obstacle is 1 cell ahead
-        
-        # Calculate obstacle grid position
-        dr = 0
-        dc = 0
-        
-        # Determine direction based on robot orientation
-        if -0.785 <= robot_theta <= 0.785:  # Facing right
-            dc = obstacle_distance_cells
-        elif 0.785 < robot_theta <= 2.356:  # Facing down
-            dr = obstacle_distance_cells
-        elif -2.356 <= robot_theta < -0.785:  # Facing up
-            dr = -obstacle_distance_cells
-        else:  # Facing left
-            dc = -obstacle_distance_cells
-        
-        obstacle_row = robot_pos[0] + dr
-        obstacle_col = robot_pos[1] + dc
-        
-        # Validate obstacle position
-        if 0 <= obstacle_row < GRID_ROWS and 0 <= obstacle_col < GRID_COLS:
-            obstacles.append((obstacle_row, obstacle_col))
-            print(f"D* Lite: Obstacle grid position: ({obstacle_row}, {obstacle_col})")
-    
-    return obstacles
+            print(f"D* Lite: Updating obstacle at {obs_pos}")
+            dstar_planner.update_obstacle(obs_pos, True)
+        path_needs_replan = True
 
 # --- Main Program ---
 def main():
@@ -615,7 +523,6 @@ def main():
                             world_pose = webots_data.get('world_pose', {})
                             robot_theta_rad = world_pose.get('theta_rad', 0.0)
                             line_sensors_binary = webots_data.get('sensors_binary', [0,0,0])
-                            distance_sensor_value = webots_data.get('distance_sensor', 1.0)
                             detected_obstacles = webots_data.get('detected_obstacles', [])
 
                             # Update robot position
@@ -652,24 +559,6 @@ def main():
                             # Handle detected obstacles with D* Lite
                             if detected_obstacles and dstar_planner:
                                 handle_obstacle_detection(detected_obstacles)
-                                print(f"Processing {len(detected_obstacles)} new obstacles")
-
-                            # Distance sensor obstacle detection - trigger D* replanning when value > 500
-                            if current_robot_grid_pos_actual and distance_sensor_value > 500:
-                                print(f"Distance sensor triggered replanning: {distance_sensor_value}")
-                                # Force immediate replanning when obstacle detected
-                                path_needs_replan = True
-                                last_replan_time = 0  # Force immediate replan
-                                
-                                # Detect obstacles ahead using distance sensor
-                                sensor_obstacles = detect_obstacles_from_distance_sensor(
-                                    distance_sensor_value, 
-                                    current_robot_grid_pos_actual, 
-                                    robot_theta_rad
-                                )
-                                if sensor_obstacles and dstar_planner:
-                                    handle_obstacle_detection(sensor_obstacles)
-                                    print(f"Distance sensor detected {len(sensor_obstacles)} obstacles for D* replanning")
 
                             # Path planning with D* Lite
                             if path_needs_replan or (time.ticks_diff(current_time_ms, last_replan_time) > REPLAN_INTERVAL_MS):
@@ -740,8 +629,7 @@ def main():
                                 'path': planned_path,
                                 'robot_pos_on_path_esp_thinks': list(current_robot_grid_pos_path) if current_robot_grid_pos_path else None,
                                 'current_path_idx_esp': current_path_index,
-                                'algorithm': 'D* Lite',
-                                'distance_sensor_reading': distance_sensor_value
+                                'algorithm': 'D* Lite'
                             }
                             response_json = json.dumps(command) + '\n'
                             conn.sendall(response_json.encode('utf-8'))
