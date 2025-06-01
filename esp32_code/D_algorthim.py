@@ -10,8 +10,8 @@ from machine import Pin
 import math
 
 # --- WiFi Configuration ---
-WIFI_SSID = 'CJ'        # Replace with your WiFi SSID
-WIFI_PASSWORD = '4533simon' # Replace with your WiFi password
+WIFI_SSID = ''        # Replace with your WiFi SSID
+WIFI_PASSWORD = '' # Replace with your WiFi password
 SERVER_PORT = 8080
 
 # --- Onboard LED ---
