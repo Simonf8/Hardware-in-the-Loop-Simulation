@@ -198,6 +198,38 @@ def a_star(grid, start_node, end_node, heuristic='manhattan'):
     print(f"A*: Path from {start_node} to {end_node} has {len(path)} steps (explored {nodes_explored} nodes).")
     return path
 
+def detect_obstacles_from_distance_sensor(distance_value, robot_pos, robot_theta):
+    """Simple obstacle detection for A* algorithm"""
+    obstacles = []
+    OBSTACLE_THRESHOLD = 0.1  # Obstacle detected if distance < 0.1m
+    
+    if distance_value < OBSTACLE_THRESHOLD and distance_value > 0.01:
+        print(f"A* Algorithm: Distance sensor detected obstacle at {distance_value:.3f}m")
+        # Simple obstacle detection - mark cell ahead as obstacle
+        obstacle_distance_cells = 1
+        
+        dr, dc = 0, 0
+        if -0.785 <= robot_theta <= 0.785:  # Facing right
+            dc = obstacle_distance_cells
+        elif 0.785 < robot_theta <= 2.356:  # Facing down
+            dr = obstacle_distance_cells
+        elif -2.356 <= robot_theta < -0.785:  # Facing up
+            dr = -obstacle_distance_cells
+        else:  # Facing left
+            dc = -obstacle_distance_cells
+        
+        obstacle_row = robot_pos[0] + dr
+        obstacle_col = robot_pos[1] + dc
+        
+        if 0 <= obstacle_row < GRID_ROWS and 0 <= obstacle_col < GRID_COLS:
+            obstacles.append((obstacle_row, obstacle_col))
+            # Mark as obstacle in grid
+            if grid_map[obstacle_row][obstacle_col] == 0:
+                grid_map[obstacle_row][obstacle_col] = 1
+                print(f"A*: Marked ({obstacle_row}, {obstacle_col}) as obstacle")
+    
+    return obstacles
+
 # --- WiFi Connection ---
 def connect_wifi(ssid, password):
     """
@@ -396,6 +428,7 @@ def main():
                             world_pose = webots_data.get('world_pose', {})
                             robot_theta_rad = world_pose.get('theta_rad', 0.0)
                             line_sensors_binary = webots_data.get('sensors_binary', [0,0,0])
+                            distance_sensor_value = webots_data.get('distance_sensor', 1.0)
 
                             # Update robot position
                             if new_robot_pos_actual != current_robot_grid_pos_actual:
@@ -425,6 +458,16 @@ def main():
                             if goal_grid_pos is None:
                                 goal_grid_pos = new_goal_pos
                                 path_needs_replan = True
+
+                            # Distance sensor obstacle detection
+                            if current_robot_grid_pos_actual and distance_sensor_value < 1.0:
+                                sensor_obstacles = detect_obstacles_from_distance_sensor(
+                                    distance_sensor_value, 
+                                    current_robot_grid_pos_actual, 
+                                    robot_theta_rad
+                                )
+                                if sensor_obstacles:
+                                    path_needs_replan = True
 
                             # Path planning with A*
                             if path_needs_replan or (time.ticks_diff(current_time_ms, last_replan_time) > REPLAN_INTERVAL_MS):

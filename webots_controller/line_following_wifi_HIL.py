@@ -2,7 +2,23 @@
 Webots HIL Controller with ESP32 Integration
 Dijkstra Path Planning with Sensor-Based Visualization
 """
-from controller import Robot
+# === WEBOTS HIL CONTROLLER WITH DYNAMIC D* REPLANNING ===
+# This controller integrates with ESP32 for Hardware-in-the-Loop simulation
+# Key features implemented:
+# 1. Distance sensor monitoring (e-puck proximity sensor ps0)
+# 2. Obstacle detection threshold: distance_value > 500 triggers D* replanning
+# 3. Real-time communication with ESP32 D* Lite path planner
+# 4. Visual feedback showing replanning status in simulation
+# 5. Enhanced robot position tracking and line following
+# 
+# Distance sensor integration:
+# - ps0 (front proximity sensor) used as main distance sensor
+# - Values > 500 indicate obstacle presence
+# - ESP32 receives sensor data and performs D* Lite replanning
+# - Updated paths sent back to Webots for execution
+# ============================================================
+
+from controller import Robot, DistanceSensor, Motor
 import socket
 import time
 import math
@@ -39,6 +55,11 @@ MIN_INITIAL_SPIN_DURATION = 2.35
 MAX_SEARCH_SPIN_DURATION = 4.5
 MAX_ADJUST_DURATION = 5.0
 TURN_ADJUST_BASE_SPEED = FORWARD_SPEED * 0.8
+
+# Enhanced turning parameters for 180-degree turns during obstacle avoidance
+OBSTACLE_TURN_SPEED_FACTOR = 1.2  # Higher speed for faster turns
+OBSTACLE_MIN_INITIAL_SPIN_DURATION = 3.5  # Longer duration for 180-degree turns
+OBSTACLE_MAX_SEARCH_SPIN_DURATION = 6.0  # Extended search time for line reacquisition
 
 # Line Centering Parameters to keep the bot alwyas on the middle of the line
 AGGRESSIVE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.3
@@ -123,7 +144,7 @@ def get_line_centered_position(rwp, crgp, ldf):
     # No line detected, use actual position
     return rwp['x'], rwp['z']
 
-def update_visualization(rwp, crgp, path_esp):
+def update_visualization(rwp, crgp, path_esp, distance_value=0.0):
     global fig, ax, robot_trail_world, planned_path_grid
     
     if fig is None:
@@ -279,18 +300,26 @@ def update_visualization(rwp, crgp, path_esp):
     # Info panel
     line_status = "ON BLACK LINE" if any(line_detected) else "NO LINE DETECTED"
     
+    # Check for D* replanning trigger
+    replanning_status = ""
+    if distance_value > 500:
+        replanning_status = "🔄 D* REPLANNING TRIGGERED!"
+    
     # Show both actual and display positions for debugging
     actual_grid = world_to_grid(rwp['x'], rwp['z'])
     display_grid = world_to_grid(display_x, display_z)
     
     info_text = (f"Grid Position: {crgp} -> Goal: ({GOAL_ROW},{GOAL_COL})\n"
                 f"Sensor Status: {line_status}\n"
+                f"Distance Sensor: {distance_value:.3f}m {replanning_status}\n"
                 f"Actual World: X={rwp['x']:.3f}, Z={rwp['z']:.3f}\n"
                 f"Display World: X={display_x:.3f}, Z={display_z:.3f}\n"
                 f"Sensors (L,C,R): {line_detected} | Raw: {[f'{v:.0f}' for v in raw_values]}\n"
                 f"Turn Phase: {webots_internal_turn_phase}")
     
     info_bg = 'lightgreen' if any(line_detected) else 'lightcoral'
+    if distance_value > 500:
+        info_bg = 'orange'  # Highlight when replanning is triggered
     
     ax.text(0.02, 0.98, info_text, transform=ax.transAxes, va='top', fontsize=8,
            bbox=dict(boxstyle='round,pad=0.4', facecolor=info_bg, alpha=0.8))
@@ -327,6 +356,16 @@ for name in ['gs0', 'gs1', 'gs2']:
     sensor = robot.getDevice(name)
     sensor.enable(timestep)
     gs_wb.append(sensor)
+
+# Proximity sensors (e-puck distance sensors)
+proximity_sensors = []
+for i in range(8):  # e-puck has 8 proximity sensors ps0-ps7
+    ps = robot.getDevice(f'ps{i}')
+    ps.enable(timestep)
+    proximity_sensors.append(ps)
+
+# Use front proximity sensor as main distance sensor
+distance_sensor = proximity_sensors[0]  # ps0 is front-facing
 
 # Network variables
 client_socket = None
@@ -387,7 +426,7 @@ last_data_send = 0
 while robot.step(timestep) != -1:
     if iteration == 0:
         connect_to_esp32()
-        update_visualization(rwp, crgp, planned_path_grid)
+        update_visualization(rwp, crgp, planned_path_grid, 0.0)
     
     iteration += 1
     current_time = robot.getTime()
@@ -396,6 +435,13 @@ while robot.step(timestep) != -1:
     raw_values = [s.getValue() for s in gs_wb]
     line_detected = [1 if v < LINE_THRESHOLD else 0 for v in raw_values]
     left_sensor, center_sensor, right_sensor = line_detected
+    
+    # Read distance sensor
+    distance_value = distance_sensor.getValue()
+    
+    # Check for obstacle detection threshold (trigger D* replanning on ESP32)
+    if distance_value > 500:
+        print(f"  OBSTACLE DETECTED! Distance Sensor: {distance_value:.3f} - D* replanning will be triggered")
 
     # Update odometry
     if not first_odometry:
@@ -439,7 +485,7 @@ while robot.step(timestep) != -1:
         left_motor.setVelocity(0.0)
         right_motor.setVelocity(0.0)
         if iteration % 10 == 0:
-            update_visualization(rwp, crgp, planned_path_grid)
+            update_visualization(rwp, crgp, planned_path_grid, 0.0)
         continue
 
     # Motor control
@@ -457,7 +503,8 @@ while robot.step(timestep) != -1:
                     'z': round(rwp['z'], 3),
                     'theta_rad': round(rwp['theta'], 3)
                 },
-                'sensors_binary': line_detected
+                'sensors_binary': line_detected,
+                'distance_sensor': round(distance_value, 3)
             }
             client_socket.sendall((json.dumps(data) + '\n').encode('utf-8'))
             last_data_send = current_time
@@ -480,6 +527,15 @@ while robot.step(timestep) != -1:
                     esp_data = json.loads(message)
                     if esp_data.get('type') == 'esp32_command':
                         new_command = esp_data.get('action', 'stop')
+                        
+                        # Display ESP32 response with distance sensor info and replanning status
+                        esp32_distance = esp_data.get('distance_sensor_reading', 'N/A')
+                        algorithm = esp_data.get('algorithm', 'Unknown')
+                        path_length = len(esp_data.get('path', []))
+                        replanning_indicator = "🔄 REPLANNING" if esp32_distance != 'N/A' and esp32_distance > 500 else ""
+                        print(f"ESP32 Response: Action={new_command}, Algorithm={algorithm}, "
+                              f"Distance Reading={esp32_distance}, Path Length={path_length} {replanning_indicator}")
+                        
                         if (new_command != esp32_command and 
                             esp32_command in ['turn_left', 'turn_right'] and 
                             new_command not in ['turn_left', 'turn_right']):
@@ -534,36 +590,59 @@ while robot.step(timestep) != -1:
             left_speed, right_speed = base_speed * 0.3, base_speed * 0.3
 
     elif esp32_command in ['turn_left', 'turn_right']:
-        # Turn logic
+        # Enhanced turn logic with obstacle avoidance detection
         if webots_turn_command_active != esp32_command or webots_internal_turn_phase == 'NONE':
             webots_turn_command_active = esp32_command
             webots_internal_turn_phase = 'INITIATE_SPIN'
             turn_phase_start_time = current_time
-            print(f"Turn {esp32_command} initiated")
+            
+            # Detect if this might be a 180-degree turn based on recent obstacle detection
+            is_major_turn = distance_value > 500 or esp32_distance == 'N/A' or (esp32_distance != 'N/A' and esp32_distance > 500)
+            
+            if is_major_turn:
+                print(f"⚠️  Major turn {esp32_command} initiated (180° obstacle avoidance)")
+                webots_turn_command_active += "_major"  # Flag for major turn
+            else:
+                print(f"Turn {esp32_command} initiated (normal)")
+
+        # Determine if this is a major turn
+        is_major_turn = "_major" in webots_turn_command_active
+        
+        # Select appropriate parameters
+        if is_major_turn:
+            turn_speed_factor = OBSTACLE_TURN_SPEED_FACTOR
+            min_spin_duration = OBSTACLE_MIN_INITIAL_SPIN_DURATION
+            max_search_duration = OBSTACLE_MAX_SEARCH_SPIN_DURATION
+            base_command = webots_turn_command_active.replace("_major", "")
+        else:
+            turn_speed_factor = TURN_SPEED_FACTOR
+            min_spin_duration = MIN_INITIAL_SPIN_DURATION
+            max_search_duration = MAX_SEARCH_SPIN_DURATION
+            base_command = webots_turn_command_active
 
         if webots_internal_turn_phase == 'INITIATE_SPIN':
-            spin_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.7
-            spin_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 1.0
-            left_speed, right_speed = (spin_in, spin_out) if webots_turn_command_active == 'turn_left' else (spin_out, spin_in)
+            spin_in = -FORWARD_SPEED * turn_speed_factor * 0.7
+            spin_out = FORWARD_SPEED * turn_speed_factor * 1.0
+            left_speed, right_speed = (spin_in, spin_out) if base_command == 'turn_left' else (spin_out, spin_in)
             
-            if current_time - turn_phase_start_time > MIN_INITIAL_SPIN_DURATION:
+            if current_time - turn_phase_start_time > min_spin_duration:
                 webots_internal_turn_phase = 'SEARCHING_LINE'
                 turn_phase_start_time = current_time
                 
         elif webots_internal_turn_phase == 'SEARCHING_LINE':
-            search_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.4
-            search_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 0.8
-            left_speed, right_speed = (search_in, search_out) if webots_turn_command_active == 'turn_left' else (search_out, search_in)
+            search_in = -FORWARD_SPEED * turn_speed_factor * 0.4
+            search_out = FORWARD_SPEED * turn_speed_factor * 0.8
+            left_speed, right_speed = (search_in, search_out) if base_command == 'turn_left' else (search_out, search_in)
             
             line_acquired = (center_sensor or 
-                           (webots_turn_command_active == 'turn_left' and left_sensor and not right_sensor) or 
-                           (webots_turn_command_active == 'turn_right' and right_sensor and not left_sensor))
+                           (base_command == 'turn_left' and left_sensor and not right_sensor) or 
+                           (base_command == 'turn_right' and right_sensor and not left_sensor))
             
             if line_acquired:
                 webots_internal_turn_phase = 'ADJUSTING_ON_LINE'
                 turn_phase_start_time = current_time
-                print(f"Line acquired during {webots_turn_command_active}")
-            elif current_time - turn_phase_start_time > MAX_SEARCH_SPIN_DURATION:
+                print(f"Line acquired during {base_command}")
+            elif current_time - turn_phase_start_time > max_search_duration:
                 print(f"Turn timeout - stopping")
                 webots_internal_turn_phase = 'NONE'
                 left_speed, right_speed = 0, 0
@@ -601,14 +680,15 @@ while robot.step(timestep) != -1:
     
     # Update visualization
     if iteration % 3 == 0:
-        update_visualization(rwp, crgp, planned_path_grid)
+        update_visualization(rwp, crgp, planned_path_grid, distance_value)
     
     # Status logging
     if iteration % 25 == 0:
         connection_status = "Connected" if is_connected else "Disconnected"
         sensor_status = "ON LINE" if any(line_detected) else "NO LINE"
         print(f"Time: {current_time:.1f}s | ESP32: {connection_status} | Command: {esp32_command} | "
-              f"Grid: {crgp} | {sensor_status} {line_detected} | Turn: {webots_internal_turn_phase}")
+              f"Grid: {crgp} | {sensor_status} {line_detected} | Turn: {webots_internal_turn_phase} | "
+              f"Distance: {distance_value:.3f}m")
 
 # Cleanup
 if client_socket:
