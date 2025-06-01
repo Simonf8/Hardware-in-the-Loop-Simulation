@@ -27,7 +27,7 @@
 
 ```ascii
 ╔══════════════════════════════════════════════════════════════╗
-║            🎭 DIJKSTRA "THE SCHOLAR" LIVE SHOWCASE 🎭          ║
+║            🎭 DIJKSTRA "THE SCHOLAR" LIVE SHOWCASE 🎭        ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  🎯 ESP32 Hardware → WiFi → Webots Robot → Live Navigation   ║
 ║  🌊 Matrix-style grid exploration with electric blue trails  ║
@@ -35,7 +35,7 @@
 ║  📊 Live sensor feedback and visualization dashboard         ║
 ║  ⚡ Hardware-in-the-Loop magic demonstrated step-by-step     ║
 ║                                                              ║
-║  🔥 SEE THE FUTURE OF ROBOTICS IN ACTION! 🔥                ║
+║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
@@ -88,19 +88,16 @@ graph LR
 
 ```ascii
     ╔═══════════════════════════════════════════════════════════════╗
-    ║           🧠 PATHFINDING ALGORITHMS COMPARISON 🚀              ║
+    ║           🧠 PATHFINDING ALGORITHMS COMPARISON 🚀             ║
     ╠═══════════════════════════════════════════════════════════════╣
-    ║  📊 DIJKSTRA'S    ║  ⭐ A* STAR      ║  🌟 D* LITE           ║
+    ║  📊 DIJKSTRA'S    ║  ⭐ A* STAR      ║  🌟 D* LITE            ║
     ║  ✅ Guaranteed     ║  ⚡ Faster       ║  🔄 Dynamic           ║
     ║     optimal path   ║     heuristic    ║     replanning        ║
-    ║  📈 O(V²)         ║  📈 O(b^d)      ║  📈 O(log V)          ║
+    ║  📈 O(V²)         ║  📈 O(b^d)     ║  📈 O(log V)             ║
     ║  🎯 Static maps    ║  🎯 Static maps  ║  🎯 Live maps         ║
     ║  💾 High memory    ║  💾 Low memory   ║  💾 Efficient         ║
-    ║                   ║                  ║                       ║
-    ║  🎨 VISUAL STYLE   ║  🎨 VISUAL STYLE ║  🎨 VISUAL STYLE      ║
-    ║  📘 Blue cascade   ║  🌟 Golden beams ║  🌈 Neural plasma     ║
-    ║  🌊 Wave floods    ║  🎯 Laser paths  ║  🔄 Morphing nets     ║
-    ║  ⚡ Electric grid  ║  💫 Star trails  ║  🧠 Brain synapses    ║
+    ║                   ║                  ║                        ║
+    ║   ║
     ╚═══════════════════════════════════════════════════════════════╝
 ```
 
