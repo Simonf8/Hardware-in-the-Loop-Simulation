@@ -136,8 +136,11 @@ class DStarLite:
         for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             nr, nc = r + dr, c + dc
             if 0 <= nr < self.rows and 0 <= nc < self.cols:
-                # Cost is infinity for obstacles, 1 for free cells
-                cost = float('inf') if self.grid[nr][nc] == 1 else 1
+                # Cost is 1 for free cells, infinity for obstacles
+                if self.grid[nr][nc] == 0:  # Free cell
+                    cost = 1
+                else:  # Obstacle
+                    cost = float('inf')
                 neighbors.append(((nr, nc), cost))
         
         return neighbors
@@ -265,16 +268,27 @@ class DStarLite:
             is_obstacle: True if position is now obstacle, False if free
         """
         r, c = position
+        if not (0 <= r < self.rows and 0 <= c < self.cols):
+            return
+            
         old_value = self.grid[r][c]
         new_value = 1 if is_obstacle else 0
         
         if old_value != new_value:
             self.grid[r][c] = new_value
+            print(f"D* Lite: Cell ({r}, {c}) changed from {old_value} to {new_value}")
             
-            # Update affected nodes
-            self.update_node(position)
-            for neighbor, _ in self.get_neighbors(position):
+            # Reset costs for affected cells
+            self.g[(r, c)] = float('inf')
+            self.rhs[(r, c)] = float('inf')
+            
+            # Update the node and its neighbors
+            self.update_node((r, c))
+            for neighbor, _ in self.get_neighbors((r, c)):
                 self.update_node(neighbor)
+            
+            # Force recomputation
+            self.compute_shortest_path()
     
     def replan(self, new_start):
         """
@@ -449,13 +463,22 @@ def handle_obstacle_detection(detected_obstacles):
     Args:
         detected_obstacles: List of (row, col) positions with obstacles
     """
-    global dstar_planner, path_needs_replan
+    global dstar_planner, path_needs_replan, grid_map
     
-    if dstar_planner and detected_obstacles:
+    if detected_obstacles:
         for obs_pos in detected_obstacles:
-            print(f"D* Lite: Updating obstacle at {obs_pos}")
-            dstar_planner.update_obstacle(obs_pos, True)
-        path_needs_replan = True
+            row, col = obs_pos[0], obs_pos[1]
+            if 0 <= row < GRID_ROWS and 0 <= col < GRID_COLS:
+                # Update the main grid map
+                if grid_map[row][col] == 0:  # Was a path
+                    grid_map[row][col] = 1  # Now an obstacle
+                    print(f"Obstacle detected at ({row}, {col}), marking as impassable")
+                    
+                    # If D* Lite is initialized, update it
+                    if dstar_planner:
+                        dstar_planner.update_obstacle((row, col), True)
+                    
+                    path_needs_replan = True
 
 # --- Main Program ---
 def main():
@@ -559,6 +582,7 @@ def main():
                             # Handle detected obstacles with D* Lite
                             if detected_obstacles and dstar_planner:
                                 handle_obstacle_detection(detected_obstacles)
+                                print(f"Processing {len(detected_obstacles)} new obstacles")
 
                             # Path planning with D* Lite
                             if path_needs_replan or (time.ticks_diff(current_time_ms, last_replan_time) > REPLAN_INTERVAL_MS):
