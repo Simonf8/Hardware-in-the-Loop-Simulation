@@ -15,7 +15,7 @@ ESP32_PORT = 8080
 
 # Robot Parameters
 WHEEL_RADIUS = 0.0205
-AXLE_LENGTH = 0.0610  # somtimes if u change this for some fucking reason u see good signs even though the correct is around 0.0520 or somthing
+AXLE_LENGTH = 0.05900  # somtimes if u change this for some fucking reason u see good signs even though the correct is around 0.0520 or somthing
 
 # Grid Configuration
 GRID_ROWS = 15
@@ -23,21 +23,21 @@ GRID_COLS = 19
 GRID_CELL_SIZE = 0.057  # You also need to adjust this to match the cells size it shoud be around from 0.05 to 0.06
 
 # Grid origin coordinates you can check this in webots
-GRID_ORIGIN_X = -0.3
-GRID_ORIGIN_Z = 0.0
+GRID_ORIGIN_X = 0.0
+GRID_ORIGIN_Z = 00.0
 
 GOAL_ROW = 14
 GOAL_COL = 0
 
 # Parameters
-FORWARD_SPEED = 1.8 # don't make it too fast eitherway it will not work properly
+FORWARD_SPEED = 1.2 # don't make it too fast eitherway it will not work properly
 LINE_THRESHOLD = 600
 
 # this is for the turing parameters one point i was stuck beacuse it was not turning at all the issue was diffrent but it does't hurt to have this
-TURN_SPEED_FACTOR = 0.8
-MIN_INITIAL_SPIN_DURATION = 0.35
-MAX_SEARCH_SPIN_DURATION = 2.5
-MAX_ADJUST_DURATION = 2.0
+TURN_SPEED_FACTOR = 0.9
+MIN_INITIAL_SPIN_DURATION = 2.35
+MAX_SEARCH_SPIN_DURATION = 4.5
+MAX_ADJUST_DURATION = 5.0
 TURN_ADJUST_BASE_SPEED = FORWARD_SPEED * 0.8
 
 # Line Centering Parameters to keep the bot alwyas on the middle of the line
@@ -352,8 +352,8 @@ def connect_to_esp32():
         client_socket = None
         return False
 
-# CONFIGURABLE STARTING POSITION
-INITIAL_GRID_ROW = 0
+# CONFIGURABLE STARTING POSITION change this if u want a diffrent starting point.. u can read the nodes from the dashboard
+INITIAL_GRID_ROW = 3
 INITIAL_GRID_COL = 18
 
 # Set initial position from grid coordinates
