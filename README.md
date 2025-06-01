@@ -27,7 +27,11 @@
 
 ```ascii
 ╔══════════════════════════════════════════════════════════════╗
+<<<<<<< HEAD
 ║            🎭 DIJKSTRA "THE SCHOLAR" LIVE SHOWCASE 🎭          ║
+=======
+║            🎭 DIJKSTRA "THE SCHOLAR" LIVE SHOWCASE 🎭        ║
+>>>>>>> a51047d72267b80cf47ee9c42d9c6e88fdb7f17a
 ╠══════════════════════════════════════════════════════════════╣
 ║  🎯 ESP32 Hardware → WiFi → Webots Robot → Live Navigation   ║
 ║  🌊 Matrix-style grid exploration with electric blue trails  ║
@@ -35,7 +39,11 @@
 ║  📊 Live sensor feedback and visualization dashboard         ║
 ║  ⚡ Hardware-in-the-Loop magic demonstrated step-by-step     ║
 ║                                                              ║
+<<<<<<< HEAD
 ║  🔥 SEE THE FUTURE OF ROBOTICS IN ACTION! 🔥                ║
+=======
+║                                                              ║
+>>>>>>> a51047d72267b80cf47ee9c42d9c6e88fdb7f17a
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
@@ -88,6 +96,7 @@ graph LR
 
 ```ascii
     ╔═══════════════════════════════════════════════════════════════╗
+<<<<<<< HEAD
     ║           🧠 PATHFINDING ALGORITHMS COMPARISON 🚀              ║
     ╠═══════════════════════════════════════════════════════════════╣
     ║  📊 DIJKSTRA'S    ║  ⭐ A* STAR      ║  🌟 D* LITE           ║
@@ -101,6 +110,18 @@ graph LR
     ║  📘 Blue cascade   ║  🌟 Golden beams ║  🌈 Neural plasma     ║
     ║  🌊 Wave floods    ║  🎯 Laser paths  ║  🔄 Morphing nets     ║
     ║  ⚡ Electric grid  ║  💫 Star trails  ║  🧠 Brain synapses    ║
+=======
+    ║           🧠 PATHFINDING ALGORITHMS COMPARISON 🚀             ║
+    ╠═══════════════════════════════════════════════════════════════╣
+    ║  📊 DIJKSTRA'S    ║  ⭐ A* STAR      ║  🌟 D* LITE            ║
+    ║  ✅ Guaranteed     ║  ⚡ Faster       ║  🔄 Dynamic           ║
+    ║     optimal path   ║     heuristic    ║     replanning        ║
+    ║  📈 O(V²)         ║  📈 O(b^d)     ║  📈 O(log V)             ║
+    ║  🎯 Static maps    ║  🎯 Static maps  ║  🎯 Live maps         ║
+    ║  💾 High memory    ║  💾 Low memory   ║  💾 Efficient         ║
+    ║                   ║                  ║                        ║
+    ║   ║
+>>>>>>> a51047d72267b80cf47ee9c42d9c6e88fdb7f17a
     ╚═══════════════════════════════════════════════════════════════╝
 ```
 
