@@ -1,8 +1,8 @@
 """
 Webots HIL Controller with ESP32 Integration
-Dijkstra Path Planning with Sensor-Based Visualization
+Dijkstra Path Planning with Sensor-Based Visualization and Obstacle Detection
 """
-from controller import Robot
+from controller import Robot, DistanceSensor, Motor
 import socket
 import time
 import math
@@ -32,6 +32,18 @@ GOAL_COL = 0
 # Parameters
 FORWARD_SPEED = 1.2 # don't make it too fast eitherway it will not work properly
 LINE_THRESHOLD = 600
+
+# Distance Sensor Parameters
+DISTANCE_SENSOR_THRESHOLD = 500  # Raw threshold value for obstacle detection (higher value = closer)
+# Note: For testing, you can lower this value (e.g., 300-400) to make obstacle detection more sensitive
+# Higher values = need to be closer to detect. Typical IR sensor range: 20-1000+ raw units
+OBSTACLE_DETECTION_ENABLED = True
+OBSTACLE_CELL_AHEAD = 2  # How many cells ahead to mark as obstacle
+
+# Testing/Debug Parameters
+OBSTACLE_TEST_MODE = False  # Set to True to inject test obstacles for debugging
+TEST_OBSTACLE_INTERVAL = 5.0  # Inject test obstacle every N seconds
+last_test_obstacle = 0
 
 # this is for the turing parameters one point i was stuck beacuse it was not turning at all the issue was diffrent but it does't hurt to have this
 TURN_SPEED_FACTOR = 0.9
@@ -63,6 +75,9 @@ world_grid = [
     [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1]   # Row 14
 ]
 
+# Track detected obstacles
+detected_obstacles_grid = set()  # Set of (row, col) tuples
+recent_new_obstacles = []  # Store recently detected obstacles for ESP32 communication
 
 # Global variables
 plt.ion()
@@ -123,13 +138,67 @@ def get_line_centered_position(rwp, crgp, ldf):
     # No line detected, use actual position
     return rwp['x'], rwp['z']
 
+def detect_obstacles_from_distance_sensors(rwp, robot_theta, distance_values):
+    """
+    Detect obstacles based on distance sensor readings.
+    Returns list of grid positions that contain obstacles.
+    """
+    if not OBSTACLE_DETECTION_ENABLED:
+        return []
+    
+    new_obstacles = []
+    
+    # Distance sensor configuration
+    # ps5 = front, ps7 = front-left, ps0 = front-right
+    sensor_config = [
+        {'angle': 0, 'name': 'front'},           # ps5
+        {'angle': math.pi/4, 'name': 'front-left'},    # ps7  
+        {'angle': -math.pi/4, 'name': 'front-right'}   # ps0
+    ]
+    
+    for i, (distance_value, config) in enumerate(zip(distance_values, sensor_config)):
+        sensor_name = ['ps5', 'ps7', 'ps0'][i]
+        if distance_value > DISTANCE_SENSOR_THRESHOLD:  # Note: higher value = closer for IR sensors
+            print(f"🔍 {config['name']} sensor ({sensor_name}) detected obstacle: {distance_value:.0f} > {DISTANCE_SENSOR_THRESHOLD}")
+            # Calculate obstacle position based on sensor angle and robot orientation
+            sensor_angle = robot_theta + config['angle']
+            
+            # Calculate obstacle position (multiple cells ahead based on OBSTACLE_CELL_AHEAD)
+            for cell_distance in range(1, OBSTACLE_CELL_AHEAD + 1):
+                obstacle_distance = GRID_CELL_SIZE * cell_distance
+                obstacle_x = rwp['x'] + obstacle_distance * math.cos(sensor_angle)
+                obstacle_z = rwp['z'] + obstacle_distance * math.sin(sensor_angle)
+                
+                obstacle_row, obstacle_col = world_to_grid(obstacle_x, obstacle_z)
+                
+                # Debug the coordinate calculation
+                if distance_value > DISTANCE_SENSOR_THRESHOLD:
+                    print(f"    🎯 Cell {cell_distance}: World({obstacle_x:.3f}, {obstacle_z:.3f}) -> Grid({obstacle_row}, {obstacle_col})")
+                
+                # Check if this is a valid obstacle position
+                if (0 <= obstacle_row < GRID_ROWS and 0 <= obstacle_col < GRID_COLS):
+                    # Only mark as obstacle if it's supposed to be a pathable cell
+                    if world_grid[obstacle_row][obstacle_col] == 0:
+                        if (obstacle_row, obstacle_col) not in detected_obstacles_grid:
+                            new_obstacles.append((obstacle_row, obstacle_col))
+                            detected_obstacles_grid.add((obstacle_row, obstacle_col))
+                            print(f"🚨 OBSTACLE detected by {config['name']} sensor at grid ({obstacle_row}, {obstacle_col})")
+                        else:
+                            print(f"    ℹ️  Already detected obstacle at grid ({obstacle_row}, {obstacle_col})")
+                    else:
+                        print(f"    ⚪ Skipping non-pathable cell at grid ({obstacle_row}, {obstacle_col}) - grid value: {world_grid[obstacle_row][obstacle_col]}")
+                else:
+                    print(f"    ❌ Out of bounds: grid ({obstacle_row}, {obstacle_col}) not in range [0-{GRID_ROWS-1}, 0-{GRID_COLS-1}]")
+    
+    return new_obstacles
+
 def update_visualization(rwp, crgp, path_esp):
     global fig, ax, robot_trail_world, planned_path_grid
     
     if fig is None:
         fig, ax = plt.subplots(figsize=(12, 9))
         ax.set_aspect('equal')
-        ax.set_title('gyattt', fontsize=14, fontweight='bold')
+        ax.set_title('HIL Navigation with Obstacle Detection', fontsize=14, fontweight='bold')
         ax.set_xlabel('World X (m)')
         ax.set_ylabel('World Z (m)')
         
@@ -145,26 +214,6 @@ def update_visualization(rwp, crgp, path_esp):
                    [GRID_ORIGIN_Z, GRID_ORIGIN_Z + GRID_ROWS * GRID_CELL_SIZE], 
                    'k-', alpha=0.2, lw=0.5)
         
-        # Draw cells
-        for r in range(GRID_ROWS):
-            for c in range(GRID_COLS):
-                cx, cz = grid_to_world_center(r, c)
-                color = 'black' if world_grid[r][c] == 0 else 'lightgrey'
-                alpha = 0.6 if color == 'black' else 0.3
-                
-                rect = plt.Rectangle(
-                    (cx - GRID_CELL_SIZE/2, cz - GRID_CELL_SIZE/2),
-                    GRID_CELL_SIZE, GRID_CELL_SIZE,
-                    facecolor=color, alpha=alpha, edgecolor='gray', linewidth=0.5
-                )
-                ax.add_patch(rect)
-                
-                # Add coordinate labels
-                if r % 3 == 0 and c % 3 == 0:
-                    ax.text(cx, cz, f'({r},{c})', 
-                           ha='center', va='center', fontsize=6, 
-                           color='blue', alpha=0.5)
-        
         # Set limits
         margin = GRID_CELL_SIZE * 2
         ax.set_xlim(GRID_ORIGIN_X - margin, GRID_ORIGIN_X + GRID_COLS * GRID_CELL_SIZE + margin)
@@ -175,6 +224,7 @@ def update_visualization(rwp, crgp, path_esp):
         legend_elements = [
             Patch(fc='black', alpha=0.7, label='Grid Map: Black Line'),
             Patch(fc='lightgrey', alpha=0.3, label='Grid Map: White Space'),
+            Patch(fc='red', alpha=0.7, label='Detected Obstacle'),
             Patch(fc='green', alpha=0.6, label='Sensor Detection'),
             plt.Line2D([0], [0], color='cyan', lw=2, label='Robot Trail'),
             plt.Line2D([0], [0], color='magenta', marker='o', ms=5, ls='--', lw=2, label='Planned Path'),
@@ -188,13 +238,46 @@ def update_visualization(rwp, crgp, path_esp):
 
     # Clear dynamic elements
     num_static_lines = (GRID_ROWS + 1) + (GRID_COLS + 1)
-    num_static_patches = GRID_ROWS * GRID_COLS
-    num_static_texts = sum(1 for r in range(GRID_ROWS) for c in range(GRID_COLS) 
-                          if r % 3 == 0 and c % 3 == 0)
     
-    for element_list in [ax.lines[num_static_lines:], ax.patches[num_static_patches:], ax.texts[num_static_texts:]]:
-        while element_list:
-            element_list.pop(0).remove()
+    # Clear all patches and redraw
+    for patch in ax.patches[:]:
+        patch.remove()
+        
+    # Clear texts
+    texts_to_remove = [t for t in ax.texts if t.get_position()[0] > GRID_ORIGIN_X - GRID_CELL_SIZE]
+    for text in texts_to_remove:
+        text.remove()
+    
+    # Clear dynamic lines
+    lines_to_remove = ax.lines[num_static_lines:]
+    for line in lines_to_remove:
+        line.remove()
+    
+    # Draw cells
+    for r in range(GRID_ROWS):
+        for c in range(GRID_COLS):
+            cx, cz = grid_to_world_center(r, c)
+            
+            # Check if this cell is a detected obstacle
+            if (r, c) in detected_obstacles_grid:
+                color = 'red'
+                alpha = 0.7
+            else:
+                color = 'black' if world_grid[r][c] == 0 else 'lightgrey'
+                alpha = 0.6 if color == 'black' else 0.3
+            
+            rect = plt.Rectangle(
+                (cx - GRID_CELL_SIZE/2, cz - GRID_CELL_SIZE/2),
+                GRID_CELL_SIZE, GRID_CELL_SIZE,
+                facecolor=color, alpha=alpha, edgecolor='gray', linewidth=0.5
+            )
+            ax.add_patch(rect)
+            
+            # Add coordinate labels
+            if r % 3 == 0 and c % 3 == 0:
+                ax.text(cx, cz, f'({r},{c})', 
+                       ha='center', va='center', fontsize=6, 
+                       color='blue', alpha=0.5)
     
     # Get sensor data
     try:
@@ -288,6 +371,7 @@ def update_visualization(rwp, crgp, path_esp):
                 f"Actual World: X={rwp['x']:.3f}, Z={rwp['z']:.3f}\n"
                 f"Display World: X={display_x:.3f}, Z={display_z:.3f}\n"
                 f"Sensors (L,C,R): {line_detected} | Raw: {[f'{v:.0f}' for v in raw_values]}\n"
+                f"Obstacles: {len(detected_obstacles_grid)}\n"
                 f"Turn Phase: {webots_internal_turn_phase}")
     
     info_bg = 'lightgreen' if any(line_detected) else 'lightcoral'
@@ -328,6 +412,25 @@ for name in ['gs0', 'gs1', 'gs2']:
     sensor.enable(timestep)
     gs_wb.append(sensor)
 
+# initialize distance sensors
+ps = []
+psNames = [
+    'ps0', 'ps1', 'ps2', 'ps3',
+    'ps4', 'ps5', 'ps6', 'ps7'
+]
+
+print("\n--- Initializing Distance Sensors ---")
+for i in range(8):
+    ps.append(robot.getDevice(psNames[i]))
+    ps[i].enable(timestep)
+    print(f"✓ Distance sensor {psNames[i]} enabled")
+
+# We'll use ps5 (front), ps7 (front-left), ps0 (front-right) for obstacle detection
+distance_sensors = [ps[5], ps[7], ps[0]]  # front, front-left, front-right
+print(f"✓ Using sensors ps5 (front), ps7 (front-left), ps0 (front-right) for obstacle detection")
+print(f"✓ Distance threshold: {DISTANCE_SENSOR_THRESHOLD} (raw value)")
+print("-" * 40)
+
 # Network variables
 client_socket = None
 is_connected = False
@@ -344,10 +447,10 @@ def connect_to_esp32():
         client_socket.connect((ESP32_IP_ADDRESS, ESP32_PORT))
         client_socket.settimeout(0.05)
         is_connected = True
-        print("ESP32 connected successfully")
+        print("✅ ESP32 connected successfully")
         return True
     except Exception as e:
-        print(f"ESP32 connection failed: {e}")
+        print(f"❌ ESP32 connection failed: {e}")
         is_connected = False
         client_socket = None
         return False
@@ -364,6 +467,10 @@ rwp['theta'] = math.pi / 2.0  # Facing down
 crgp = world_to_grid(rwp['x'], rwp['z'])
 print(f"Robot initialized at grid {crgp}, world ({rwp['x']:.3f}, {rwp['z']:.3f})")
 print(f"Target goal: ({GOAL_ROW}, {GOAL_COL})")
+print(f"Obstacle detection: {'ENABLED' if OBSTACLE_DETECTION_ENABLED else 'DISABLED'}")
+if OBSTACLE_TEST_MODE:
+    print(f"🧪 TEST MODE: Will inject artificial obstacles every {TEST_OBSTACLE_INTERVAL}s")
+print(f"Distance sensor threshold: {DISTANCE_SENSOR_THRESHOLD} (lower = more sensitive)")
 
 # Coordinate system verification
 print("\nCoordinate System Verification:")
@@ -382,6 +489,9 @@ print("-" * 60)
 iteration = 0
 last_connection_attempt = 0
 last_data_send = 0
+last_obstacle_check = 0
+distance_display_counter = 0
+last_test_obstacle = 0  # For test mode obstacle injection
 
 # Main control loop
 while robot.step(timestep) != -1:
@@ -396,6 +506,54 @@ while robot.step(timestep) != -1:
     raw_values = [s.getValue() for s in gs_wb]
     line_detected = [1 if v < LINE_THRESHOLD else 0 for v in raw_values]
     left_sensor, center_sensor, right_sensor = line_detected
+    
+    # read distance sensors outputs
+    psValues = []
+    for i in range(8):
+        psValues.append(ps[i].getValue())
+    
+    # Get values for obstacle detection sensors
+    distance_values = [psValues[5], psValues[7], psValues[0]]  # front, front-left, front-right
+    
+    # Display distance sensor values every 10 iterations
+    if OBSTACLE_DETECTION_ENABLED:
+        distance_display_counter += 1
+        if distance_display_counter >= 10:
+            distance_display_counter = 0
+            # Show detailed sensor readings
+            print(f"📏 Distance Sensors - Front: {distance_values[0]:.0f}, "
+                  f"Front-Left: {distance_values[1]:.0f}, "
+                  f"Front-Right: {distance_values[2]:.0f} (threshold: {DISTANCE_SENSOR_THRESHOLD})")
+            
+            # Show which sensors are detecting obstacles
+            detection_status = []
+            front_obstacle = distance_values[0] > DISTANCE_SENSOR_THRESHOLD
+            left_obstacle = distance_values[1] > DISTANCE_SENSOR_THRESHOLD
+            right_obstacle = distance_values[2] > DISTANCE_SENSOR_THRESHOLD
+            
+            if front_obstacle:
+                detection_status.append(f"FRONT({distance_values[0]:.0f})")
+            if left_obstacle:
+                detection_status.append(f"LEFT({distance_values[1]:.0f})")
+            if right_obstacle:
+                detection_status.append(f"RIGHT({distance_values[2]:.0f})")
+            
+            if detection_status:
+                print(f"⚠️  Obstacle detection: {' + '.join(detection_status)}")
+            else:
+                print(f"✅ No obstacles detected")
+            
+            # Show recent obstacles count
+            if recent_new_obstacles:
+                print(f"🔄 Pending obstacles to send: {len(recent_new_obstacles)}")
+            
+            # Old individual alerts (keep for compatibility)
+            if front_obstacle:
+                print(f"⚠️  Front sensor detecting obstacle! Raw value: {distance_values[0]:.0f}")
+            if left_obstacle:
+                print(f"⚠️  Front-Left sensor detecting obstacle! Raw value: {distance_values[1]:.0f}")
+            if right_obstacle:
+                print(f"⚠️  Front-Right sensor detecting obstacle! Raw value: {distance_values[2]:.0f}")
 
     # Update odometry
     if not first_odometry:
@@ -431,6 +589,27 @@ while robot.step(timestep) != -1:
                 print(f"Position mismatch at grid {crgp}: Grid expects {'BLACK' if grid_value == 0 else 'WHITE'}, "
                       f"sensors detect {'LINE' if any(line_detected) else 'NO LINE'}")
 
+    # Detect obstacles periodically
+    if current_time - last_obstacle_check > 0.2:  # Check every 200ms
+        if OBSTACLE_DETECTION_ENABLED:
+            new_obstacles = detect_obstacles_from_distance_sensors(rwp, rwp['theta'], distance_values)
+            if new_obstacles:
+                print(f"🚧 {len(new_obstacles)} new obstacles detected!")
+                recent_new_obstacles.extend(new_obstacles)  # Add to persistent storage
+        last_obstacle_check = current_time
+    
+    # Test mode: inject artificial obstacles for debugging
+    if OBSTACLE_TEST_MODE and current_time - last_test_obstacle > TEST_OBSTACLE_INTERVAL:
+        # Inject test obstacle ahead of robot
+        test_obstacle_row = crgp[0] + 2  # 2 cells ahead
+        test_obstacle_col = crgp[1]
+        if (0 <= test_obstacle_row < GRID_ROWS and 0 <= test_obstacle_col < GRID_COLS and
+            (test_obstacle_row, test_obstacle_col) not in detected_obstacles_grid):
+            print(f"🧪 TEST MODE: Injecting artificial obstacle at ({test_obstacle_row}, {test_obstacle_col})")
+            recent_new_obstacles.append((test_obstacle_row, test_obstacle_col))
+            detected_obstacles_grid.add((test_obstacle_row, test_obstacle_col))
+            last_test_obstacle = current_time
+
     # Handle ESP32 connection
     if not is_connected:
         if current_time - last_connection_attempt > 3.0:
@@ -457,10 +636,16 @@ while robot.step(timestep) != -1:
                     'z': round(rwp['z'], 3),
                     'theta_rad': round(rwp['theta'], 3)
                 },
-                'sensors_binary': line_detected
+                'sensors_binary': line_detected,
+                'detected_obstacles': recent_new_obstacles.copy()  # Send copy of recent obstacles
             }
             client_socket.sendall((json.dumps(data) + '\n').encode('utf-8'))
             last_data_send = current_time
+            
+            # Clear recent obstacles after sending to avoid sending duplicates
+            if recent_new_obstacles:
+                print(f"📤 Sent {len(recent_new_obstacles)} obstacles to ESP32")
+                recent_new_obstacles.clear()
         except Exception as e:
             print(f"Send error: {e}")
             is_connected = False
@@ -487,6 +672,11 @@ while robot.step(timestep) != -1:
                             webots_turn_command_active = None
                         esp32_command = new_command
                         planned_path_grid = esp_data.get('path', planned_path_grid)
+                        
+                        # Show algorithm being used
+                        algorithm = esp_data.get('algorithm', 'Unknown')
+                        if iteration % 100 == 0:
+                            print(f"📍 Using {algorithm} algorithm for path planning")
                 except json.JSONDecodeError as e:
                     print(f"JSON error: {e}")
                 except Exception as e:
@@ -607,8 +797,9 @@ while robot.step(timestep) != -1:
     if iteration % 25 == 0:
         connection_status = "Connected" if is_connected else "Disconnected"
         sensor_status = "ON LINE" if any(line_detected) else "NO LINE"
+        obstacles_str = f"Obstacles: {len(detected_obstacles_grid)}" if detected_obstacles_grid else "No obstacles"
         print(f"Time: {current_time:.1f}s | ESP32: {connection_status} | Command: {esp32_command} | "
-              f"Grid: {crgp} | {sensor_status} {line_detected} | Turn: {webots_internal_turn_phase}")
+              f"Grid: {crgp} | {sensor_status} {line_detected} | {obstacles_str}")
 
 # Cleanup
 if client_socket:
@@ -618,7 +809,10 @@ if client_socket:
         pass
 
 if fig:
-    print("Simulation ended")
+    print("\nSimulation ended")
+    print(f"Total obstacles detected: {len(detected_obstacles_grid)}")
+    if detected_obstacles_grid:
+        print("Obstacle positions:", list(detected_obstacles_grid))
     plt.ioff()
     plt.show(block=True)
 

@@ -451,11 +451,30 @@ def handle_obstacle_detection(detected_obstacles):
     """
     global dstar_planner, path_needs_replan
     
-    if dstar_planner and detected_obstacles:
+    if not detected_obstacles:
+        return
+    
+    if dstar_planner:
+        obstacle_count = 0
         for obs_pos in detected_obstacles:
-            print(f"D* Lite: Updating obstacle at {obs_pos}")
-            dstar_planner.update_obstacle(obs_pos, True)
-        path_needs_replan = True
+            # Convert to tuple if it's a list
+            if isinstance(obs_pos, list):
+                obs_pos = tuple(obs_pos)
+            
+            # Validate obstacle position
+            if (isinstance(obs_pos, tuple) and len(obs_pos) == 2 and
+                0 <= obs_pos[0] < GRID_ROWS and 0 <= obs_pos[1] < GRID_COLS):
+                print(f"D* Lite: Updating obstacle at {obs_pos}")
+                dstar_planner.update_obstacle(obs_pos, True)
+                obstacle_count += 1
+            else:
+                print(f"D* Lite: Invalid obstacle position: {obs_pos}")
+        
+        if obstacle_count > 0:
+            path_needs_replan = True
+            print(f"D* Lite: {obstacle_count} obstacles processed, replanning required")
+    else:
+        print(f"D* Lite: Cannot process obstacles - planner not initialized")
 
 # --- Main Program ---
 def main():
@@ -524,6 +543,10 @@ def main():
                             robot_theta_rad = world_pose.get('theta_rad', 0.0)
                             line_sensors_binary = webots_data.get('sensors_binary', [0,0,0])
                             detected_obstacles = webots_data.get('detected_obstacles', [])
+                            
+                            # Debug obstacle reception
+                            if detected_obstacles:
+                                print(f"📨 Received {len(detected_obstacles)} obstacles from Webots: {detected_obstacles}")
 
                             # Update robot position
                             if new_robot_pos_actual != current_robot_grid_pos_actual:
@@ -557,8 +580,13 @@ def main():
                                 path_needs_replan = True
 
                             # Handle detected obstacles with D* Lite
-                            if detected_obstacles and dstar_planner:
+                            if detected_obstacles:
+                                print(f"📍 Processing obstacles: {detected_obstacles}")
                                 handle_obstacle_detection(detected_obstacles)
+                            elif dstar_planner:
+                                # Only print this occasionally to avoid spam
+                                if current_time_ms % 5000 < 100:  # Every 5 seconds, for 100ms window
+                                    print(f"📡 No obstacles in current message")
 
                             # Path planning with D* Lite
                             if path_needs_replan or (time.ticks_diff(current_time_ms, last_replan_time) > REPLAN_INTERVAL_MS):
@@ -634,7 +662,7 @@ def main():
                             response_json = json.dumps(command) + '\n'
                             conn.sendall(response_json.encode('utf-8'))
 
-                    except json.JSONDecodeError as e:
+                    except ValueError as e:
                         print(f"JSON Error: {e}")
                     except Exception as e:
                         print(f"Processing error: {e}")

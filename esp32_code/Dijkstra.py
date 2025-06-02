@@ -386,9 +386,12 @@ if __name__ == "__main__":
                                             # and we are about to command 'forward', assume it will reach the next step.
                                             # Or, more robustly, update based on *past* successful movement.
                                             
-                                            # Let's update current_robot_grid_pos_path and current_path_index
+                                            # This is a bit tricky because Webots takes time to move.
+                                            # We should only advance the path index if we are sure the robot has reached the next node.
+                                            # A better approach: ESP determines action. Webots moves.
                                             # *after* confirming robot has reached the *next* target node.
                                             if current_path_index < len(planned_path) -1:
+                                                
                                                 prospective_next_node_on_path = planned_path[current_path_index+1]
                                                 if current_robot_grid_pos_actual == prospective_next_node_on_path:
                                                     current_path_index +=1
