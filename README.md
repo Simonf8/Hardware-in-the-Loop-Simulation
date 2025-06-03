@@ -1,7 +1,7 @@
 <div align="center">
 
 # HARDWARE-IN-THE-LOOP NAVIGATION SYSTEM
-    PLEASE DON'T COPY EVERYTHING AND HAND IT IN AS YOUR WORK
+    PLEASE DON'T COPY EVERYTHING AND HAND IT IN AS YOUR WORK, USE IT AS INSPIRATION
 
 <img src="https://img.shields.io/badge/STATUS-ACTIVE-00E5FF?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iOCIgZmlsbD0iIzAwRTVGRiIvPgo8L3N2Zz4K"/>
 <img src="https://img.shields.io/badge/ESP32-MICROPYTHON-4A148C?style=for-the-badge"/>
@@ -10,7 +10,7 @@
 
 ```ascii
 ╔══════════════════════════════════════════════════════════════╗
-║                    ⚡ REAL HARDWARE CONTROLS VIRTUAL ROBOT ⚡                   ║
+║                     REAL HARDWARE CONTROLS VIRTUAL ROBOT                    ║
 ║                                                              ║
 ║  ESP32 ←→ WiFi ←→ Webots  |  Live Pathfinding  |  Real-time HIL  ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -321,7 +321,7 @@ sequenceDiagram
 
 <div align="center">
 
-## ⚡ POWER STATISTICS
+## POWER STATISTICS
 
 ```ascii
 ╔═══════════════════════════════════════════════════════════╗
