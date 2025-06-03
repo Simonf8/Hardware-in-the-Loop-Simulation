@@ -10,9 +10,9 @@
 
 ```ascii
 ╔══════════════════════════════════════════════════════════════╗
-║                     REAL HARDWARE CONTROLS VIRTUAL ROBOT                    ║
+║                     REAL HARDWARE CONTROLS VIRTUAL ROBOT     ║
 ║                                                              ║
-║  ESP32 ←→ WiFi ←→ Webots  |  Live Pathfinding  |  Real-time HIL  ║
+║  ESP32 ←→ WiFi ←→ Webots  |  Live Pathfinding  |Real-time HIL║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
