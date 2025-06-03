@@ -1,4 +1,5 @@
 """
+Simon.(CJ)
 Webots HIL Controller with ESP32 Integration
 Dijkstra Path Planning with Sensor-Based Visualization and Obstacle Detection
 """
@@ -15,26 +16,26 @@ ESP32_PORT = 8080
 
 # Robot Parameters
 WHEEL_RADIUS = 0.0205
-AXLE_LENGTH = 0.05900  # somtimes if u change this for some fucking reason u see good signs even though the correct is around 0.0520 or somthing
+AXLE_LENGTH = 0.057  # somtimes if u change this for some fucking reason u see good signs even though the correct is around 0.0520 or somthing
 
 # Grid Configuration
 GRID_ROWS = 15
-GRID_COLS = 19
-GRID_CELL_SIZE = 0.05456  # You also need to adjust this to match the cells size it shoud be around from 0.05 to 0.06
+GRID_COLS = 21
+GRID_CELL_SIZE = 0.051 # You also need to adjust this to match the cells size it shoud be around from 0.05 to 0.06
 
-# Grid origin coordinates you can check this in webots
-GRID_ORIGIN_X = 0.0452
+# Grid origin coordinates of your robot, you can check this in your sceen tree in webots
+GRID_ORIGIN_X = 0.050002
 GRID_ORIGIN_Z = -0.639e-05
 
 GOAL_ROW = 14
 GOAL_COL = 0
 
 # Parameters
-FORWARD_SPEED = 1.5 # don't make it too fast eitherway it will not work properly
+FORWARD_SPEED = 2.5 # don't make it too fast or too slow 2.5 shoud be fine  it will not work properly
 LINE_THRESHOLD = 600
 
 # Distance Sensor Parameters
-DISTANCE_SENSOR_THRESHOLD = 90  # Raw threshold value for obstacle detection (higher value = closer)
+DISTANCE_SENSOR_THRESHOLD = 100  # Raw threshold value for obstacle detection (higher value = closer)
 # Note: For testing, you can lower this value (e.g., 300-400) to make obstacle detection more sensitive
 # Higher values = need to be closer to detect. Typical IR sensor range: 20-1000+ raw units
 OBSTACLE_DETECTION_ENABLED = True
@@ -48,31 +49,32 @@ last_test_obstacle = 0
 # this is for the turing parameters one point i was stuck beacuse it was not turning at all the issue was diffrent but it does't hurt to have this
 TURN_SPEED_FACTOR = 1.2
 MIN_INITIAL_SPIN_DURATION = 2.35
-MAX_SEARCH_SPIN_DURATION = 4.5
+MAX_SEARCH_SPIN_DURATION = 20.0  # Increased timeout to allow for full rotation
 MAX_ADJUST_DURATION = 5.0
 TURN_ADJUST_BASE_SPEED = FORWARD_SPEED * 0.8
+TURN_UNTIL_LINE_FOUND = True  # Continue turning until line is found, ignore timeout
 
 # Line Centering Parameters to keep the bot alwyas on the middle of the line
-AGGRESSIVE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.3
-MODERATE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 2.2
+AGGRESSIVE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 1.3
+MODERATE_CORRECTION_DIFFERENTIAL = FORWARD_SPEED * 1.2
 
 # World grid definition (0 = Black Line, 1 = White Space)
 world_grid = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 0
-    [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 1
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 2
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 3
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 4
-    [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0],  # Row 5
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 6
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 7
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 8
-    [0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],  # Row 9
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 10
-    [0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0],  # Row 11
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 12
-    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1],  # Row 13
-    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1]   # Row 14
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 0
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],  # Row 1
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 2
+    [0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0],  # Row 3
+    [0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0],  # Row 4
+    [0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0],  # Row 5
+    [0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0],  # Row 6
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 7
+    [0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0],  # Row 8
+    [0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],  # Row 9
+    [0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0],  # Row 10
+    [0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0],  # Row 11
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 12
+    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  # Row 13
+    [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1]   # Row 14
 ]
 
 # Track detected obstacles
@@ -104,91 +106,84 @@ def grid_to_world_center(row, col):
     return world_x, world_z
 
 def get_line_centered_position(rwp, crgp, ldf):
-    """Center robot position on grid cell when sensors detect line"""
-    # If sensors detect a line, trust it completely :) 
-    if any(ldf):
-        # Find the nearest black line cell to current position
-        current_row, current_col = crgp
-        
-        # Check if current cell is black line
-        if 0 <= current_row < GRID_ROWS and 0 <= current_col < GRID_COLS:
-            if world_grid[current_row][current_col] == 0:
-                # Already on black line, center on it
-                grid_center_x, grid_center_z = grid_to_world_center(current_row, current_col)
-                return grid_center_x, grid_center_z
-            else:
-                # this is not working now but the plan is when the Sensors detect line but grid shows white - find nearest black cell 
-                min_dist = float('inf')
-                best_x, best_z = rwp['x'], rwp['z']
-                
-                # Search adjacent cells
-                for dr in [-1, 0, 1]:
-                    for dc in [-1, 0, 1]:
-                        r, c = current_row + dr, current_col + dc
-                        if 0 <= r < GRID_ROWS and 0 <= c < GRID_COLS:
-                            if world_grid[r][c] == 0:  # Black line cell
-                                cx, cz = grid_to_world_center(r, c)
-                                dist = (cx - rwp['x'])**2 + (cz - rwp['z'])**2
-                                if dist < min_dist:
-                                    min_dist = dist
-                                    best_x, best_z = cx, cz
-                
-                return best_x, best_z
-    
-    # No line detected, use actual position
+    """ALWAYS trust sensors - return actual robot position regardless of grid map"""
+    # SENSORS ARE GROUND TRUTH - never "correct" position based on grid map
     return rwp['x'], rwp['z']
 
 def detect_obstacles_from_distance_sensors(rwp, robot_theta, distance_values):
     """
     Detect obstacles based on distance sensor readings.
-    Returns list of grid positions that contain obstacles.
+    Use all three sensors but simplified grid placement.
     """
     if not OBSTACLE_DETECTION_ENABLED:
         return []
     
     new_obstacles = []
+    current_row, current_col = world_to_grid(rwp['x'], rwp['z'])
     
-    # Distance sensor configuration
-    # ps5 = front, ps7 = front-left, ps0 = front-right
-    sensor_config = [
-        {'angle': 0, 'name': 'front'},           # ps5
-        {'angle': math.pi/4, 'name': 'front-left'},    # ps7  
-        {'angle': -math.pi/4, 'name': 'front-right'}   # ps0
-    ]
+    # Check all three sensors: front, front-left, front-right
+    sensor_names = ['FRONT', 'FRONT-LEFT', 'FRONT-RIGHT']
     
-    for i, (distance_value, config) in enumerate(zip(distance_values, sensor_config)):
-        sensor_name = ['ps5', 'ps7', 'ps0'][i]
-        if distance_value > DISTANCE_SENSOR_THRESHOLD:  # Note: higher value = closer for IR sensors
-            print(f"🔍 {config['name']} sensor ({sensor_name}) detected obstacle: {distance_value:.0f} > {DISTANCE_SENSOR_THRESHOLD}")
-            # Calculate obstacle position based on sensor angle and robot orientation
-            sensor_angle = robot_theta + config['angle']
+    for i, (distance_value, sensor_name) in enumerate(zip(distance_values, sensor_names)):
+        if distance_value > DISTANCE_SENSOR_THRESHOLD:
+            print(f"🔍 {sensor_name} sensor detected obstacle: {distance_value:.0f} > {DISTANCE_SENSOR_THRESHOLD}")
             
-            # Calculate obstacle position (multiple cells ahead based on OBSTACLE_CELL_AHEAD)
-            for cell_distance in range(1, OBSTACLE_CELL_AHEAD + 1):
-                obstacle_distance = GRID_CELL_SIZE * cell_distance
-                obstacle_x = rwp['x'] + obstacle_distance * math.cos(sensor_angle)
-                obstacle_z = rwp['z'] + obstacle_distance * math.sin(sensor_angle)
+            # Determine which direction robot is facing
+            theta_deg = math.degrees(robot_theta) % 360
+            
+            # Calculate obstacle position based on robot direction and which sensor detected it
+            if -45 <= theta_deg <= 45 or 315 <= theta_deg <= 360:
+                # Robot facing RIGHT
+                if i == 0:  # Front sensor
+                    obstacle_row, obstacle_col = current_row, current_col + 1
+                elif i == 1:  # Front-left sensor  
+                    obstacle_row, obstacle_col = current_row - 1, current_col + 1
+                else:  # Front-right sensor
+                    obstacle_row, obstacle_col = current_row + 1, current_col + 1
+                direction = "RIGHT"
                 
-                obstacle_row, obstacle_col = world_to_grid(obstacle_x, obstacle_z)
+            elif 45 < theta_deg <= 135:
+                # Robot facing DOWN  
+                if i == 0:  # Front sensor
+                    obstacle_row, obstacle_col = current_row + 1, current_col
+                elif i == 1:  # Front-left sensor
+                    obstacle_row, obstacle_col = current_row + 1, current_col + 1
+                else:  # Front-right sensor
+                    obstacle_row, obstacle_col = current_row + 1, current_col - 1
+                direction = "DOWN"
                 
-                # Debug the coordinate calculation
-                if distance_value > DISTANCE_SENSOR_THRESHOLD:
-                    print(f"    🎯 Cell {cell_distance}: World({obstacle_x:.3f}, {obstacle_z:.3f}) -> Grid({obstacle_row}, {obstacle_col})")
+            elif 135 < theta_deg <= 225:
+                # Robot facing LEFT
+                if i == 0:  # Front sensor
+                    obstacle_row, obstacle_col = current_row, current_col - 1
+                elif i == 1:  # Front-left sensor
+                    obstacle_row, obstacle_col = current_row + 1, current_col - 1
+                else:  # Front-right sensor
+                    obstacle_row, obstacle_col = current_row - 1, current_col - 1
+                direction = "LEFT"
                 
-                # Check if this is a valid obstacle position
-                if (0 <= obstacle_row < GRID_ROWS and 0 <= obstacle_col < GRID_COLS):
-                    # Only mark as obstacle if it's supposed to be a pathable cell
-                    if world_grid[obstacle_row][obstacle_col] == 0:
-                        if (obstacle_row, obstacle_col) not in detected_obstacles_grid:
-                            new_obstacles.append((obstacle_row, obstacle_col))
-                            detected_obstacles_grid.add((obstacle_row, obstacle_col))
-                            print(f"🚨 OBSTACLE detected by {config['name']} sensor at grid ({obstacle_row}, {obstacle_col})")
-                        else:
-                            print(f"    ℹ️  Already detected obstacle at grid ({obstacle_row}, {obstacle_col})")
-                    else:
-                        print(f"    ⚪ Skipping non-pathable cell at grid ({obstacle_row}, {obstacle_col}) - grid value: {world_grid[obstacle_row][obstacle_col]}")
+            else:  # 225 < theta_deg < 315 - Robot facing UP
+                if i == 0:  # Front sensor
+                    obstacle_row, obstacle_col = current_row - 1, current_col
+                elif i == 1:  # Front-left sensor
+                    obstacle_row, obstacle_col = current_row - 1, current_col - 1
+                else:  # Front-right sensor
+                    obstacle_row, obstacle_col = current_row - 1, current_col + 1
+                direction = "UP"
+            
+            print(f"    🎯 Robot at ({current_row},{current_col}) facing {direction} ({theta_deg:.0f}°)")
+            print(f"    🎯 {sensor_name} sensor marking obstacle at ({obstacle_row},{obstacle_col})")
+            
+            # Check if obstacle position is valid and add it
+            if (0 <= obstacle_row < GRID_ROWS and 0 <= obstacle_col < GRID_COLS):
+                if (obstacle_row, obstacle_col) not in detected_obstacles_grid:
+                    new_obstacles.append((obstacle_row, obstacle_col))
+                    detected_obstacles_grid.add((obstacle_row, obstacle_col))
+                    print(f"🚨 OBSTACLE detected by {sensor_name} at grid ({obstacle_row}, {obstacle_col})")
                 else:
-                    print(f"    ❌ Out of bounds: grid ({obstacle_row}, {obstacle_col}) not in range [0-{GRID_ROWS-1}, 0-{GRID_COLS-1}]")
+                    print(f"    ℹ️  Already detected obstacle at grid ({obstacle_row}, {obstacle_col})")
+            else:
+                print(f"    ❌ Out of bounds: grid ({obstacle_row}, {obstacle_col})")
     
     return new_obstacles
 
@@ -338,18 +333,12 @@ def update_visualization(rwp, crgp, path_esp):
         )
         ax.add_patch(highlight_rect)
         
-        # Cell status
-        grid_val = world_grid[crgp[0]][crgp[1]] if (0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS) else -1
+        # Cell status - SENSORS ARE GROUND TRUTH
         sensor_status = "ON LINE" if sensors_on_line else "NO LINE"
-        grid_status = "black" if grid_val == 0 else "white" if grid_val == 1 else "OOB"
+        status_text = f"Sensors: {sensor_status}"
         
-        # Show mismatch warning
-        mismatch = (sensors_on_line and grid_val == 1) or (not sensors_on_line and grid_val == 0)
-        status_text = f"Sensors: {sensor_status}\nGrid: {grid_status}"
-        if mismatch:
-            status_text += "\nMISMATCH!"
-        
-        status_color = 'red' if mismatch else ('green' if sensors_on_line else 'orange')
+        # No more mismatch warnings - sensors are always right!
+        status_color = 'green' if sensors_on_line else 'orange'
         
         ax.text(cx, cz + GRID_CELL_SIZE * 0.6, status_text, 
                ha='center', va='bottom', fontsize=7, color=status_color, weight='bold',
@@ -425,9 +414,9 @@ for i in range(8):
     ps[i].enable(timestep)
     print(f"✓ Distance sensor {psNames[i]} enabled")
 
-# We'll use ps5 (front), ps7 (front-left), ps0 (front-right) for obstacle detection
-distance_sensors = [ps[5], ps[7], ps[0]]  # front, front-left, front-right
-print(f"✓ Using sensors ps5 (front), ps7 (front-left), ps0 (front-right) for obstacle detection")
+# CORRECTED: ps0 is actually front, ps5 is front-right
+distance_sensors = [ps[0], ps[7], ps[5]]  # front, front-left, front-right  
+print(f"✓ Using sensors ps0 (front), ps7 (front-left), ps5 (front-right) for obstacle detection")
 print(f"✓ Distance threshold: {DISTANCE_SENSOR_THRESHOLD} (raw value)")
 print("-" * 40)
 
@@ -456,8 +445,8 @@ def connect_to_esp32():
         return False
 
 # CONFIGURABLE STARTING POSITION change this if u want a diffrent starting point.. u can read the nodes from the dashboard
-INITIAL_GRID_ROW = 3
-INITIAL_GRID_COL = 18
+INITIAL_GRID_ROW = 2
+INITIAL_GRID_COL = 20
 
 # Set initial position from grid coordinates
 rwp['x'], rwp['z'] = grid_to_world_center(INITIAL_GRID_ROW, INITIAL_GRID_COL)
@@ -513,47 +502,55 @@ while robot.step(timestep) != -1:
         psValues.append(ps[i].getValue())
     
     # Get values for obstacle detection sensors
-    distance_values = [psValues[5], psValues[7], psValues[0]]  # front, front-left, front-right
+    # CORRECTED MAPPING: ps0 is actually front, not ps5!
+    distance_values = [psValues[0], psValues[7], psValues[5]]  # front(ps0), front-left(ps7), front-right(ps5)
     
     # Display distance sensor values every 10 iterations
     if OBSTACLE_DETECTION_ENABLED:
         distance_display_counter += 1
         if distance_display_counter >= 10:
             distance_display_counter = 0
-            # Show detailed sensor readings
-            print(f"📏 Distance Sensors - Front: {distance_values[0]:.0f}, "
-                  f"Front-Left: {distance_values[1]:.0f}, "
-                  f"Front-Right: {distance_values[2]:.0f} (threshold: {DISTANCE_SENSOR_THRESHOLD})")
             
-            # Show which sensors are detecting obstacles
+            # Show ALL 8 sensors to figure out which is which!
+            print(f"📏 ALL SENSORS: ps0={psValues[0]:.0f}, ps1={psValues[1]:.0f}, ps2={psValues[2]:.0f}, ps3={psValues[3]:.0f}")
+            print(f"              ps4={psValues[4]:.0f}, ps5={psValues[5]:.0f}, ps6={psValues[6]:.0f}, ps7={psValues[7]:.0f}")
+            print(f"   THRESHOLD: {DISTANCE_SENSOR_THRESHOLD}")
+            
+            # Show our current mapping
+            print(f"📏 CORRECTED mapping - Front(ps0): {distance_values[0]:.0f}, "
+                  f"Front-Left(ps7): {distance_values[1]:.0f}, "
+                  f"Front-Right(ps5): {distance_values[2]:.0f}")
+            
+            # Show which sensors are above threshold
+            over_threshold = []
+            for i in range(8):
+                if psValues[i] > DISTANCE_SENSOR_THRESHOLD:
+                    over_threshold.append(f"ps{i}({psValues[i]:.0f})")
+            
+            if over_threshold:
+                print(f"🔴 SENSORS OVER THRESHOLD: {', '.join(over_threshold)}")
+            else:
+                print(f"✅ No sensors over threshold")
+            
+            # Show which sensors are detecting obstacles according to current mapping
             detection_status = []
             front_obstacle = distance_values[0] > DISTANCE_SENSOR_THRESHOLD
             left_obstacle = distance_values[1] > DISTANCE_SENSOR_THRESHOLD
             right_obstacle = distance_values[2] > DISTANCE_SENSOR_THRESHOLD
             
             if front_obstacle:
-                detection_status.append(f"FRONT({distance_values[0]:.0f})")
+                detection_status.append(f"FRONT/ps0({distance_values[0]:.0f})")
             if left_obstacle:
-                detection_status.append(f"LEFT({distance_values[1]:.0f})")
+                detection_status.append(f"LEFT/ps7({distance_values[1]:.0f})")
             if right_obstacle:
-                detection_status.append(f"RIGHT({distance_values[2]:.0f})")
+                detection_status.append(f"RIGHT/ps5({distance_values[2]:.0f})")
             
             if detection_status:
-                print(f"⚠️  Obstacle detection: {' + '.join(detection_status)}")
-            else:
-                print(f"✅ No obstacles detected")
+                print(f"⚠️  Current mapping detection: {' + '.join(detection_status)}")
             
             # Show recent obstacles count
             if recent_new_obstacles:
                 print(f"🔄 Pending obstacles to send: {len(recent_new_obstacles)}")
-            
-            # Old individual alerts (keep for compatibility)
-            if front_obstacle:
-                print(f"⚠️  Front sensor detecting obstacle! Raw value: {distance_values[0]:.0f}")
-            if left_obstacle:
-                print(f"⚠️  Front-Left sensor detecting obstacle! Raw value: {distance_values[1]:.0f}")
-            if right_obstacle:
-                print(f"⚠️  Front-Right sensor detecting obstacle! Raw value: {distance_values[2]:.0f}")
 
     # Update odometry
     if not first_odometry:
@@ -578,16 +575,10 @@ while robot.step(timestep) != -1:
         prev_right_encoder = right_encoder.getValue()
         first_odometry = False
     
-    # Update grid position
+    # Update grid position - no more mismatch checks, sensors are ground truth
     new_grid_pos = world_to_grid(rwp['x'], rwp['z'])
     if new_grid_pos != crgp:
         crgp = new_grid_pos
-        # Check for position mismatch
-        if 0 <= crgp[0] < GRID_ROWS and 0 <= crgp[1] < GRID_COLS:
-            grid_value = world_grid[crgp[0]][crgp[1]]
-            if (grid_value == 0 and not any(line_detected)) or (grid_value == 1 and any(line_detected)):
-                print(f"Position mismatch at grid {crgp}: Grid expects {'BLACK' if grid_value == 0 else 'WHITE'}, "
-                      f"sensors detect {'LINE' if any(line_detected) else 'NO LINE'}")
 
     # Detect obstacles periodically
     if current_time - last_obstacle_check > 0.2:  # Check every 200ms
@@ -691,16 +682,44 @@ while robot.step(timestep) != -1:
     # Motor control
     left_speed, right_speed = 0.0, 0.0
 
+    # SENSOR OVERRIDE: If sensors don't detect line, force search regardless of ESP32 command
+    sensors_detect_line = any(line_detected)
+    
     if esp32_command not in ['turn_left', 'turn_right'] and webots_internal_turn_phase != 'NONE':
         webots_internal_turn_phase = 'NONE'
         webots_turn_command_active = None
 
-    if esp32_command == 'stop':
+    # ALWAYS TRUST THE SENSORS - they are ground truth!
+    if webots_internal_turn_phase != 'NONE':
+        # Turn in progress - ignore ALL ESP32 commands except stop
+        if esp32_command == 'stop':
+            webots_internal_turn_phase = 'NONE'
+            webots_turn_command_active = None
+            effective_command = 'stop'
+        else:
+            effective_command = webots_turn_command_active
+            if iteration % 30 == 0:
+                print(f"🔄 Finishing {webots_turn_command_active} turn - ignoring '{esp32_command}'")
+    elif sensors_detect_line and esp32_command not in ['turn_left', 'turn_right', 'stop']:
+        # Sensors detect line - follow it regardless of ESP32 command or grid map
+        effective_command = 'forward'
+        if esp32_command != 'forward' and iteration % 20 == 0:
+            print(f"🔍 SENSOR OVERRIDE: Line detected, following line instead of '{esp32_command}'")
+    elif not sensors_detect_line and esp32_command == 'forward':
+        # Should be moving forward but no line detected - search for it
+        effective_command = 'turn_left'  # Simple: just turn left to search
+        if iteration % 20 == 0:
+            print(f"🔍 No line detected, searching...")
+    else:
+        # Normal operation
+        effective_command = esp32_command
+
+    if effective_command == 'stop':
         left_speed, right_speed = 0.0, 0.0
         webots_internal_turn_phase = 'NONE'
         webots_turn_command_active = None
         
-    elif esp32_command == 'forward':
+    elif effective_command == 'forward':
         webots_internal_turn_phase = 'NONE'
         webots_turn_command_active = None
         base_speed = FORWARD_SPEED
@@ -723,48 +742,67 @@ while robot.step(timestep) != -1:
         else:
             left_speed, right_speed = base_speed * 0.3, base_speed * 0.3
 
-    elif esp32_command in ['turn_left', 'turn_right']:
+    elif effective_command in ['turn_left', 'turn_right']:
+        turn_command = effective_command
         # Turn logic
-        if webots_turn_command_active != esp32_command or webots_internal_turn_phase == 'NONE':
-            webots_turn_command_active = esp32_command
+        if webots_turn_command_active != turn_command or webots_internal_turn_phase == 'NONE':
+            webots_turn_command_active = turn_command
             webots_internal_turn_phase = 'INITIATE_SPIN'
             turn_phase_start_time = current_time
-            print(f"Turn {esp32_command} initiated")
+            print(f"Turn {turn_command} initiated")
 
         if webots_internal_turn_phase == 'INITIATE_SPIN':
-            spin_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.7
-            spin_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 1.0
+            # Stronger initial spin to ensure we get off the current line
+            spin_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.8
+            spin_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 1.1
             left_speed, right_speed = (spin_in, spin_out) if webots_turn_command_active == 'turn_left' else (spin_out, spin_in)
+            
+            # Debug: Show initial spin progress
+            if iteration % 15 == 0:
+                print(f"🌀 Initial spin: {webots_turn_command_active}, time: {current_time - turn_phase_start_time:.1f}s/{MIN_INITIAL_SPIN_DURATION}s")
             
             if current_time - turn_phase_start_time > MIN_INITIAL_SPIN_DURATION:
                 webots_internal_turn_phase = 'SEARCHING_LINE'
                 turn_phase_start_time = current_time
+                print(f"🔍 Starting line search phase for {webots_turn_command_active}")
                 
         elif webots_internal_turn_phase == 'SEARCHING_LINE':
-            search_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.4
-            search_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 0.8
+            # Use consistent turning speed for better control
+            search_in = -FORWARD_SPEED * TURN_SPEED_FACTOR * 0.5
+            search_out = FORWARD_SPEED * TURN_SPEED_FACTOR * 0.9
             left_speed, right_speed = (search_in, search_out) if webots_turn_command_active == 'turn_left' else (search_out, search_in)
             
-            line_acquired = (center_sensor or 
-                           (webots_turn_command_active == 'turn_left' and left_sensor and not right_sensor) or 
-                           (webots_turn_command_active == 'turn_right' and right_sensor and not left_sensor))
+            # More flexible line acquisition - any sensor detecting line is good enough
+            line_acquired = any(line_detected)  # Any sensor detecting line means we found it
+            
+            # Debug: Show sensor status during turn search
+            if iteration % 10 == 0:
+                print(f"🔄 Searching line: {webots_turn_command_active}, sensors: {line_detected}, time: {current_time - turn_phase_start_time:.1f}s")
             
             if line_acquired:
                 webots_internal_turn_phase = 'ADJUSTING_ON_LINE'
                 turn_phase_start_time = current_time
-                print(f"Line acquired during {webots_turn_command_active}")
-            elif current_time - turn_phase_start_time > MAX_SEARCH_SPIN_DURATION:
-                print(f"Turn timeout - stopping")
+                print(f"✅ Line acquired during {webots_turn_command_active} - sensors: {line_detected}")
+            elif not TURN_UNTIL_LINE_FOUND and current_time - turn_phase_start_time > MAX_SEARCH_SPIN_DURATION:
+                print(f"⏰ Turn timeout after {MAX_SEARCH_SPIN_DURATION}s - stopping")
                 webots_internal_turn_phase = 'NONE'
                 left_speed, right_speed = 0, 0
+            # If TURN_UNTIL_LINE_FOUND is True, we never timeout and keep searching
                 
         elif webots_internal_turn_phase == 'ADJUSTING_ON_LINE':
             base = TURN_ADJUST_BASE_SPEED
             mod_diff = MODERATE_CORRECTION_DIFFERENTIAL * (base / FORWARD_SPEED)
             agg_diff = AGGRESSIVE_CORRECTION_DIFFERENTIAL * (base / FORWARD_SPEED)
             
+            # Debug adjustment progress
+            if iteration % 20 == 0:
+                print(f"🎯 Adjusting on line: {webots_turn_command_active}, sensors: {line_detected}, time: {current_time - turn_phase_start_time:.1f}s")
+            
             if not left_sensor and center_sensor and not right_sensor:
-                left_speed, right_speed = base * 0.5, base * 0.5
+                # Perfect center - we're done turning!
+                left_speed, right_speed = base * 0.3, base * 0.3
+                webots_internal_turn_phase = 'NONE'
+                webots_turn_command_active = None
             elif left_sensor and center_sensor and not right_sensor:
                 left_speed, right_speed = base - mod_diff, base
             elif not left_sensor and center_sensor and right_sensor:
@@ -774,16 +812,19 @@ while robot.step(timestep) != -1:
             elif not left_sensor and not center_sensor and right_sensor:
                 left_speed, right_speed = base, base - agg_diff
             elif not any(line_detected):
-                print(f"Line lost during adjustment - searching again")
+                print(f"❌ Line lost during adjustment - searching again")
                 webots_internal_turn_phase = 'SEARCHING_LINE'
                 turn_phase_start_time = current_time
             else:
                 left_speed, right_speed = base * 0.7, base * 0.7
                 
             if current_time - turn_phase_start_time > MAX_ADJUST_DURATION:
-                print(f"Adjustment timeout - stopping")
+                print(f"⏰ Adjustment timeout after {MAX_ADJUST_DURATION}s - completing turn")
                 webots_internal_turn_phase = 'NONE'
+                webots_turn_command_active = None
                 left_speed, right_speed = 0, 0
+
+
 
     # Apply motor velocities
     left_motor.setVelocity(left_speed)
@@ -798,8 +839,10 @@ while robot.step(timestep) != -1:
         connection_status = "Connected" if is_connected else "Disconnected"
         sensor_status = "ON LINE" if any(line_detected) else "NO LINE"
         obstacles_str = f"Obstacles: {len(detected_obstacles_grid)}" if detected_obstacles_grid else "No obstacles"
-        print(f"Time: {current_time:.1f}s | ESP32: {connection_status} | Command: {esp32_command} | "
-              f"Grid: {crgp} | {sensor_status} {line_detected} | {obstacles_str}")
+        turn_status = f"Turn: {webots_internal_turn_phase}" if webots_internal_turn_phase != 'NONE' else ""
+        command_display = f"{esp32_command}" if esp32_command == effective_command else f"{esp32_command}→{effective_command}"
+        print(f"Time: {current_time:.1f}s | ESP32: {connection_status} | Command: {command_display} | "
+              f"Grid: {crgp} | {sensor_status} {line_detected} | {obstacles_str} | {turn_status}")
 
 # Cleanup
 if client_socket:
