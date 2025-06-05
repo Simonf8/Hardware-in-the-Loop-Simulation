@@ -32,7 +32,7 @@
 |-----------|------------|---------|
 | **IDE** | Thonny | 4.1.7 |
 | **Firmware** | MicroPython | Latest |
-| **Platform** | Linux | - |
+| **Platform** | Linux | - | I USE ARCH BTW
 | **Python** | Python | 3.12.10 |
 | **GUI** | Tk | 8.6.15 |
 |  **Simulator** | Webots | R2023a+ |
