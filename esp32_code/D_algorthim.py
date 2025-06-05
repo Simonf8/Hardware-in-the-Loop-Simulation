@@ -1,4 +1,4 @@
-# Simon.(CJ)
+# Simon.(CJ), Heba
 # Hardware-in-the-Loop ESP32 Controller with D* Lite Algorithm
 # Advanced implementation for dynamic path replanning in robotic navigation
 

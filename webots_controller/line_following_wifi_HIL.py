@@ -1,5 +1,5 @@
 """
-Simon(CJ)
+Simon(CJ), Heba
 Hardware-in-the-Loop Webots Controller with ESP32 Integration
 Real-time path planning with sensor-based visualization and obstacle detection
 """
@@ -11,35 +11,35 @@ import matplotlib.pyplot as plt
 import json
 
 # Network Configuration
-ESP32_IP_ADDRESS = "192.168.53.193"
+ESP32_IP_ADDRESS = "192.168.53.245"
 ESP32_PORT = 8080
 
 # Robot Physical Parameters
 WHEEL_RADIUS = 0.0205
-AXLE_LENGTH = 0.057
+AXLE_LENGTH = 0.05810
 
 # Grid Configuration
 GRID_ROWS = 15
 GRID_COLS = 21
-GRID_CELL_SIZE = 0.051
+GRID_CELL_SIZE = 0.05099
 GRID_ORIGIN_X = 0.050002
 GRID_ORIGIN_Z = -0.639e-05
 
 # Navigation Parameters
 GOAL_ROW = 14
 GOAL_COL = 0
-FORWARD_SPEED = 2.5
+FORWARD_SPEED = 1.5
 LINE_THRESHOLD = 600
 
 # Obstacle Detection Configuration
-DISTANCE_SENSOR_THRESHOLD = 100
+DISTANCE_SENSOR_THRESHOLD = 110
 OBSTACLE_DETECTION_ENABLED = True
 
 # Movement Control Parameters
-TURN_SPEED_FACTOR = 1.2
-MIN_INITIAL_SPIN_DURATION = 2.35
-MAX_SEARCH_SPIN_DURATION = 20.0
-MAX_ADJUST_DURATION = 5.0
+TURN_SPEED_FACTOR = 1.5
+MIN_INITIAL_SPIN_DURATION = 0.6
+MAX_SEARCH_SPIN_DURATION = 18.9
+MAX_ADJUST_DURATION = 2.20
 TURN_ADJUST_BASE_SPEED = FORWARD_SPEED * 0.8
 TURN_UNTIL_LINE_FOUND = True
 
@@ -90,7 +90,7 @@ class CoordinateConverter:
         world_z = GRID_ORIGIN_Z + row * GRID_CELL_SIZE
         return world_x, world_z
 
-
+#1
 class ObstacleDetector:
     """Handle obstacle detection using distance sensors."""
     
