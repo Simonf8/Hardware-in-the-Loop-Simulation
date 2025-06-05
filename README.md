@@ -4,6 +4,11 @@
     PLEASE DON'T COPY EVERYTHING AND HAND IT IN AS YOUR WORK, USE IT AS INSPIRATION
     IF IT DOES'T WORK FOR YOU EITHER BLAME YOUR LAPTOP OR WIFI AND MOVE ON
 
+## LIVE DEMONSTRATION
+
+[![Demo](https://img.shields.io/badge/▶_WATCH_LIVE_DEMO-DIJKSTRA_NAVIGATION-2D1B69?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/QRNA4Zo2aBg)
+
+
 # ESP32 MicroPython Project
 
 <div align="center">
@@ -125,9 +130,6 @@ This project is open source - feel free to use and modify!
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-## LIVE DEMONSTRATION
-
-[![Demo](https://img.shields.io/badge/▶_WATCH_LIVE_DEMO-DIJKSTRA_NAVIGATION-2D1B69?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/QRNA4Zo2aBg)
 
 </div>
 
