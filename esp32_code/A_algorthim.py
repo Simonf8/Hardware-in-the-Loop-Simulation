@@ -525,12 +525,7 @@ def main():
                                                 current_robot_grid_pos_path = next_node
                                                 print(f"Advanced to path index {current_path_index}")
 
-                            # Check if goal reached
-                            if current_robot_grid_pos_actual == goal_grid_pos:
-                                action_to_send = 'stop'
-                                print("🎉 Goal Reached!")
-                                planned_path = []
-                                path_needs_replan = False
+                         
 
                             # Send command to Webots
                             command = {
